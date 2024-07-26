@@ -8,7 +8,9 @@ from lettuce.unit import UnitConversion
 
 from lettuce.boundary_TGV import newsuperTGV3D
 
-class SuperReducedTaylorGreenVortex3D:
+from lettuce.flows import TaylorGreenVortex3D
+
+class SuperReducedTaylorGreenVortex3D(TaylorGreenVortex3D):
     def __init__(self, resolution, reynolds_number, mach_number, lattice):
         self.resolution = resolution
         self.units = UnitConversion(
@@ -18,24 +20,15 @@ class SuperReducedTaylorGreenVortex3D:
             characteristic_velocity_pu=1
         )
 
-    def initial_solution(self, x):
-
-        u = np.array([
-            np.sin(x[0]) * np.cos(x[1]) * np.cos(x[2]),
-            -np.cos(x[0]) * np.sin(x[1]) * np.cos(x[2]),
-            np.zeros_like(np.sin(x[0]))
-        ])
-        p = np.array([1 / 16. * (np.cos(2 * x[0]) + np.cos(2 * x[1])) * (np.cos(2 * x[2]) + 2)])
-        return p, u
-
+    '''Initialization of the reduced TGV-Grid '''
     @property
     def grid(self):
         x,dx = np.linspace(0, np.pi/2, num=self.resolution, endpoint=False, retstep=True)
-        x=x+dx/2
         y,dy = np.linspace(0, np.pi/2, num=self.resolution, endpoint=False, retstep=True)
-        y=y+dy/2
         z,dz = np.linspace(np.pi/2, np.pi, num=self.resolution, endpoint=False, retstep=True)
-        z=z+dz/2
+        x += dx / 2
+        y += dy / 2
+        z += dz / 2
         return np.meshgrid(x, y, z, indexing='ij')
 
     @property
