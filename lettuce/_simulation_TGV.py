@@ -1,44 +1,45 @@
 """"Lattice Boltzmann Solver"""
 from timeit import default_timer as timer
-from lettuce import (
-    LettuceException, get_default_moment_transform, BGKInitialization, ExperimentalWarning, torch_gradient
+from lettuce import (torch_gradient
 )
 import torch
-from lettuce.simulation import Simulation
+from _simulation import Simulation
+
+__all__ = ["SimulationReducedTGV"]
+
+from timeit import default_timer as timer
+import torch
+from _simulation import Simulation
+from typing import List
+
 
 __all__ = ["SimulationReducedTGV"]
 
 class SimulationReducedTGV(Simulation):
-    def __init__(self, flow, lattice, collision, streaming=None):
-        super(SimulationReducedTGV, self).__init__(flow, lattice, collision, streaming)
-        self.u_initial = self.lattice.u(self.f)
-        self.p_initial = self.lattice.rho(self.f)
+    def __init__(self, flow: Flow, collision: Collision, reporter: List[Reporter]):
+        super().__init__(flow, collision, reporter)
+        self.u_initial = flow.u()
+        self.p_initial = flow.rho()
 
-    def step(self, num_steps):
-        """Take num_steps stream-and-collision steps and return performance in MLUPS."""
-        start = timer()
+    def __call__(self, num_steps: int):
+        beg = timer()
 
-        if self.i == 0:
+        if self.flow.i == 0:
             self._report()
+
         for _ in range(num_steps):
-            self.i += 1
+            for boundary in self.boundaries[1:]:
+                self.flow.f = boundary(self.flow)
 
-            for boundary in self._boundaries:
-                self.f = boundary(self.f)
-
-            self.f = self.streaming(self.f)
-            # Perform the collision routine everywhere, expect where the no_collision_mask is true
-            self.f = torch.where(self.no_collision_mask, self.f, self.collision(self.f))
-            #for boundary in self._boundaries:
-            #    self.f = boundary(self.f)
-
+            self._stream()
+            self._collide()
+            self.flow.i += 1
             self._report()
 
         end = timer()
-        seconds = end - start
-        num_grid_points = self.lattice.rho(self.f).numel()
-        mlups = num_steps * num_grid_points / 1e6 / seconds
-        return mlups
+        return num_steps * self.flow.rho().numel() / 1e6 / (end - beg)
+
+
 
     def initialize_f_neq(self):
         """Initialize the distribution function values. The f^(1) contributions are approximated by finite differences.
@@ -96,3 +97,5 @@ class SimulationReducedTGV(Simulation):
 
         feq = self.lattice.equilibrium(rho, u)
         self.f = feq + fneq
+
+

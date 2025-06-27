@@ -345,3 +345,55 @@ def initialize_f_neq(flow: 'Flow'):
     feq = flow.equilibrium(flow, rho, u)
 
     return feq - fneq
+
+def initialize_f_neq_TGV(flow: 'Flow'):
+    """Krüger et al.: erste Ordnungs-Korrektur f^(1) basierend auf Gradienten"""
+
+    rho = flow.rho()
+    u = flow.u()
+
+    nges = u.size()[1]
+
+    u_new = torch.zeros(3, nges + 6, nges + 6, nges + 6,
+                        device=u.device, dtype=u.dtype)
+    u_new[:, 3:-3, 3:-3, 3:-3] = u
+
+    u_new[:, 0:3, 3:-3, 3:-3] = torch.flip(u[:, 0:3, :, :], [1])
+    u_new[0, 0:3, 3:-3, 3:-3] *= -1
+
+    u_new[0, -3:, 3:-3, 3:-3] = -1 * torch.flip(torch.transpose(u[1, :, -3:, :], 0, 1), [0])
+    u_new[1, -3:, 3:-3, 3:-3] = torch.flip(torch.transpose(u[0, :, -3:, :], 0, 1), [0])
+    u_new[2, -3:, 3:-3, 3:-3] = torch.flip(torch.transpose(u[2, :, -3:, :], 0, 1), [0])
+
+    u_new[:, 3:-3, 0:3, 3:-3] = torch.flip(u[:, :, 0:3, :], [2])
+    u_new[1, 3:-3, 0:3, 3:-3] *= -1
+
+    u_new[0, 3:-3, -3:, 3:-3] = torch.flip(torch.transpose(u[1, -3:, :, :], 0, 1), [1])
+    u_new[1, 3:-3, -3:, 3:-3] = -1 * torch.flip(torch.transpose(u[0, -3:, :, :], 0, 1), [1])
+    u_new[2, 3:-3, -3:, 3:-3] = torch.flip(torch.transpose(u[2, -3:, :, :], 0, 1), [1])
+
+    u_new[:, 3:-3, 3:-3, -3:] = torch.flip(u[:, :, :, -3:], [3])
+    u_new[2, 3:-3, 3:-3, -3:] *= -1
+
+    u_new[0, 3:-3, 3:-3, 0:3] = torch.flip(torch.transpose(u[1, :, :, 0:3], 0, 1), [2])
+    u_new[1, 3:-3, 3:-3, 0:3] = torch.flip(torch.transpose(u[0, :, :, 0:3], 0, 1), [2])
+    u_new[2, 3:-3, 3:-3, 0:3] = -1 * torch.flip(torch.transpose(u[2, :, :, 0:3], 0, 1), [2])
+
+    gradients = []
+    for i in range(3):
+        grad = torch_gradient(u_new[i], dx=1, order=6)[None, ...]
+        trimmed_grad = grad[:, :, 3:-3, 3:-3, 3:-3]
+        gradients.append(trimmed_grad)
+
+    S = torch.cat(gradients)
+    Pi_1 = (1.0 * flow.units.relaxation_parameter_lu * rho * S
+            / flow.torch_stencil.cs ** 2)
+    Q = (torch.einsum('ia,ib->iab',
+                      [flow.torch_stencil.e, flow.torch_stencil.e])
+         - torch.eye(flow.stencil.d, device=flow.torch_stencil.e.device)
+         * flow.stencil.cs ** 2)
+    Pi_1_Q = torch.einsum('ab...,iab->i...', [Pi_1, Q])
+    fneq = torch.einsum('i,i...->i...', [flow.torch_stencil.w, Pi_1_Q])
+
+    feq = flow.equilibrium(flow, rho, u)
+    return feq - fneq
