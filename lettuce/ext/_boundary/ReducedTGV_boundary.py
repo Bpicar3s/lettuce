@@ -102,6 +102,7 @@ class newsuperTGV3D(Boundary):
                 if i == 3:
                     flow.f[self.switch_stencil_wall[i][j][1], *self.swap_w[i][1]] = \
                         torch.transpose(self.f_copies[self.switch_stencil_wall[i][j][0], :, :, i], 0, 1)
+
                 else:
                     flow.f[self.switch_stencil_wall[i][j][1], *self.swap_w[i][1]] = \
                         self.f_copies[self.switch_stencil_wall[i][j][0], :, :, i]
@@ -133,4 +134,5 @@ class newsuperTGV3D(Boundary):
 
     def native_generator(self, index):
         pass
+
 

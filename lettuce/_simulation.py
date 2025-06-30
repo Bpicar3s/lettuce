@@ -210,8 +210,6 @@ class Simulation:
 class SimulationReducedTGV(Simulation):
     def __init__(self, flow: 'Flow', collision: 'Collision', reporter: List['Reporter']):
         super().__init__(flow, collision, reporter)
-        self.u_initial = flow.u()
-        self.p_initial = flow.rho()
 
     def __call__(self, num_steps: int):
         beg = timer()
