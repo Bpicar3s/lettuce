@@ -211,24 +211,20 @@ class SimulationReducedTGV(Simulation):
     def __init__(self, flow: 'Flow', collision: 'Collision', reporter: List['Reporter']):
         super().__init__(flow, collision, reporter)
 
-    def __call__(self, num_steps: int):
+    def __call__(self, num_steps):
         beg = timer()
 
         if self.flow.i == 0:
             self._report()
 
         for _ in range(num_steps):
-            for boundary in self.boundaries[1:]:
+            for boundary in self.boundaries[1:]:  # deine BCs
                 self.flow.f = boundary(self.flow)
 
-            self._stream()
-
-            self._report()
-
-            self._collide()
-
+            self._stream()  # dann streamen
+            self.flow.f = self.collision(self.flow)  # dann Kollision
             self.flow.i += 1
-
-
+            self._report()
         end = timer()
+
         return num_steps * self.flow.rho().numel() / 1e6 / (end - beg)
