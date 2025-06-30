@@ -81,8 +81,8 @@ class newsuperTGV3D(Boundary):
                         (-1, 0, -1), (0, -1, 0), (-1, 0, 0), (0, -1, -1)]
 
     def __call__(self, flow: Flow):
-
-
+        print("ich wurde gecalled")
+        ualt = flow.u_pu.clone()
         self.f_copies = torch.stack((flow.f[:, 0, :, :].clone(), flow.f[:, :, 0, :].clone(), flow.f[:, :, :, -1].clone(),
                                      flow.f[:, :, :, 0].clone(), flow.f[:, -1, :, :].clone(), flow.f[:, :, -1, :].clone()), dim=3)
 
@@ -119,6 +119,7 @@ class newsuperTGV3D(Boundary):
                 flow.f[index[0], *self.corners[index[0] - 19]] = \
                     self.f_copies_corners[index[1], index[1] - 19]
 
+        print(ualt-flow.u_pu)
         return flow.f
 
     def make_no_collision_mask(self, shape, context):
