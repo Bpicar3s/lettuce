@@ -2,6 +2,8 @@
 import torch
 from . import Force
 from .guo import Guo
+from lettuce.ext._boundary.wallfunction import compute_wall_quantities
+
 __all__ = ['AdaptiveForce']
 
 class AdaptiveForce:
@@ -21,13 +23,10 @@ class AdaptiveForce:
         self.last_force_lu = context.convert_to_tensor([0.0] * self.flow.stencil.d)
 
     def compute_force(self):
-        utau_b_lu = getattr(self.wall_bottom, "previous_u_tau_mean", None)
-        utau_t_lu = getattr(self.wall_top, "previous_u_tau_mean", None)
+        utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=True)
+        utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=False)
 
-        if utau_b_lu is None or utau_t_lu is None:
-            return self.last_force_lu
-
-        utau_mean_lu = 0.5 * (utau_b_lu + utau_t_lu)
+        utau_mean_lu = 0.5 * (utau_b_lu.mean() + utau_t_lu.mean())
         ux_mean_lu = self.global_ux()
         Fx_lu = (utau_mean_lu ** 2) / self.H + (self.u_m - ux_mean_lu) * (self.u_m / self.H)
         self.last_force_lu = self.context.convert_to_tensor([Fx_lu] + [0.0] * (self.flow.stencil.d - 1))
