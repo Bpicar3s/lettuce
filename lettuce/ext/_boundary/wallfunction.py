@@ -133,7 +133,7 @@ class WallFunction(Boundary):
 
 
         rho = flow.rho()
-
+        rho = rho[:,mask_fluidcell]
         u = flow.u()
 
         u_x = u[0][mask_fluidcell]
@@ -152,7 +152,7 @@ class WallFunction(Boundary):
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, 1 , is_top=True if self.wall == "top" else False)
 
-        tau_w = rho[:,mask_fluidcell] * u_tau**2
+        tau_w = rho * u_tau**2
 
         if torch.isnan(tau_w).any() or torch.isinf(tau_w).any():
             self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
