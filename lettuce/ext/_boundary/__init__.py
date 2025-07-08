@@ -3,10 +3,12 @@ from .bounce_back_boundary import BounceBackBoundary
 from .equilibrium_boundary_pu import EquilibriumBoundaryPU
 from .equilibrium_outlet_p import EquilibriumOutletP
 from .ReducedTGV_boundary import newsuperTGV3D
+from .wallfunction import WallFunction
 __all__ = [
     'AntiBounceBackOutlet',
     'BounceBackBoundary',
     'EquilibriumBoundaryPU',
     'EquilibriumOutletP',
-    'newsuperTGV3D'
+    'newsuperTGV3D',
+    'WallFunction'
 ]

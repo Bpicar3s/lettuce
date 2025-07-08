@@ -69,7 +69,7 @@ class Simulation:
         # else initialise the masks
         # based on the boundaries masks
         if len(self.boundaries) > 1:
-
+            print(flow.resolution, flow.stencil.q)
             self.no_collision_mask = self.context.zero_tensor(
                 flow.resolution, dtype=torch.uint8)
             self.no_streaming_mask = self.context.zero_tensor(

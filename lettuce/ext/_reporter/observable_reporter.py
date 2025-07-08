@@ -8,10 +8,10 @@ import numpy as np
 from ... import Reporter, Flow
 from ...util import torch_gradient
 from packaging import version
-
+from lettuce.ext._boundary.wallfunction import compute_wall_quantities
 __all__ = ['Observable', 'ObservableReporter', 'MaximumVelocity',
            'IncompressibleKineticEnergy', 'Enstrophy', 'EnergySpectrum',
-           'Mass']
+           'Mass', 'GlobalMeanUXReporter', 'WallQuantities']
 
 
 class Observable(ABC):
@@ -179,7 +179,6 @@ class ObservableReporter(Reporter):
         self.observable = observable
         self.out = [] if out is None else out
         self._parameter_name = observable.__class__.__name__
-        print('steps    ', 'time    ', self._parameter_name)
 
     def __call__(self, simulation: 'Simulation'):
         if simulation.flow.i % self.interval == 0:
@@ -197,3 +196,32 @@ class ObservableReporter(Reporter):
                 self.out.append(entry)
             else:
                 print(*entry, file=self.out)
+
+
+class WallQuantities(Observable):
+    def __init__(self, mask, wall, flow, boundary, context = None):
+        self.wall = wall
+        self.mask = mask
+        self.flow = flow
+        self.boundary = boundary
+        self.context = context
+        # Ensure the boundary object has the expected attributes, initialized to tensors
+        # (This is already handled by your WallFunctionBoundaryTest __init__)
+
+    def __call__(self, f: Optional[torch.Tensor] = None):
+
+        u_tau, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=True if self.wall == "top" else False)
+        print(re_tau.mean())
+        return torch.stack([
+            u_tau.mean(),
+            y_plus.mean(),
+            re_tau.mean(),
+        ])
+
+class GlobalMeanUXReporter(Observable):
+    def __call__(self, f: Optional[torch.Tensor] = None):
+        u_field_lu = self.flow.u()  # u_field_lu: shape (3, Nx, Ny, Nz)
+        u_x_spatial = u_field_lu[0]     # Nur die x-Komponente
+        current_mean_ux_lu = torch.mean(u_x_spatial)
+        return current_mean_ux_lu
+

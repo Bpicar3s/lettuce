@@ -57,13 +57,9 @@ class PoiseuilleFlow2D(ExtFlow):
             characteristic_velocity_pu=1
         )
 
-    def make_resolution(self, resolution: Union[int, List[int]],
-                        stencil: Optional['Stencil'] = None) -> List[int]:
-        if isinstance(resolution, list):
-            assert len(resolution) == self.stencil.d
-        if isinstance(resolution, int):
-            resolution = [resolution] * self.stencil.d
-        return resolution
+    @property
+    def resolution(self):
+        return (self.resolution_x, self.resolution_y, self.resolution_z)
 
     @property
     def grid(self):
