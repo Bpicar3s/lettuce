@@ -141,14 +141,6 @@ class WallFunction(Boundary):
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
         y = torch.tensor(1.0, device=flow.f.device, dtype=flow.f.dtype)
-        nu = torch.tensor(flow.units.viscosity_lu, device=flow.f.device, dtype=flow.f.dtype)
-
-        if nu <= 0 or torch.isnan(nu) or torch.isinf(nu):
-            self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
-            self.u_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
-            self.y_plus_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
-            self.Re_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
-            return flow.f
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, 1 , is_top=True if self.wall == "top" else False)
 
@@ -195,7 +187,7 @@ class WallFunction(Boundary):
         self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
         self.u_tau_mean = u_tau.mean()
         # Lokales y_plus wie gehabt
-        self.y_plus_mean = (y * u_tau / nu).mean()
+        self.y_plus_mean = (y * u_tau / flow.units.viscosity_lu).mean()
 
         # Korrektes Re_tau
 
