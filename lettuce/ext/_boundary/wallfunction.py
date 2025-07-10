@@ -6,42 +6,43 @@ import torch
 
 # 🔧 Konstanten global festgelegt (nur einmal ändern nötig)
 
-def solve_u_tau_exact(y, u, nu):
 
-    KAPPA = 0.41
+
+def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
+
+    KAPPA = 0.4187
     B = 5.5
-    TOL = 1e-8
-    MAX_ITER = 50
-
+    E = 9.793
     A = torch.exp(torch.tensor(-KAPPA * B, device=u.device, dtype=u.dtype))
-    u_tau = u.clone()
+    u_tau= torch.sqrt(u * y / nu)
+    u_tau = 0.05 * u
 
-    for _ in range(MAX_ITER):
-        u_plus = u / u_tau
+    for i in range(max_iter):
+        u_plus = u / (u_tau + 1e-12)
         ku = KAPPA * u_plus
         exp_ku = torch.exp(ku)
 
-        f_rhs = u_plus + A * (exp_ku - 1 - ku - 0.5 * ku**2 - (1/6) * ku**3)
+        f_rhs = u_plus + A * (exp_ku - 1 - ku - 0.5 * ku ** 2 - (1/6) * ku ** 3)
         lhs = y * u_tau / nu
         residual = lhs - f_rhs
 
         d_f_rhs_duplus = 1 + A * (KAPPA * exp_ku - KAPPA - KAPPA**2 * u_plus - 0.5 * KAPPA**3 * u_plus**2)
-        d_uplus_du_tau = -u / u_tau**2
+        d_uplus_du_tau = -u / (u_tau + 1e-12)**2
         df_du_tau = d_f_rhs_duplus * d_uplus_du_tau
-
         d_lhs_du_tau = y / nu
         total_derivative = d_lhs_du_tau - df_du_tau
 
-        safe_deriv = torch.where(torch.abs(total_derivative) < 1e-12,
-                                 torch.full_like(total_derivative, 1e-12),
-                                 total_derivative)
+        total_derivative = torch.where(torch.abs(total_derivative) < 1e-10,
+                                       torch.full_like(total_derivative, 1e-10),
+                                       total_derivative)
 
         delta = residual / total_derivative
+        delta = torch.clamp(delta, min=-0.1, max=0.1)
+
         u_tau_new = u_tau - delta
 
-        if torch.max(torch.abs(delta)) < TOL:
+        if torch.max(torch.abs(delta)) < tol:
             break
-
         u_tau = u_tau_new
 
     return u_tau
