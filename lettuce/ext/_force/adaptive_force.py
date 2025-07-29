@@ -25,7 +25,7 @@ class AdaptiveForce:
     def compute_force(self):
         utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=0.5, is_top=True)
         utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=0.5, is_top=False)
-
+        print("y+:", int(y_plus.mean()),"Re_tau:", int(re_tau.mean()))
         utau_mean_lu = 0.5 * (utau_b_lu.mean() + utau_t_lu.mean())
         ux_mean_lu = self.global_ux()
         Fx_lu = (utau_mean_lu ** 2) / self.H + (self.u_m - ux_mean_lu) * (self.u_m / self.H)
