@@ -16,7 +16,7 @@ def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
     A = torch.exp(torch.tensor(-KAPPA * B, device=u.device, dtype=u.dtype))
     u_tau= torch.sqrt(u * y / nu)
     u_tau = 0.05 * u
-
+    u_tau = torch.sqrt((u * nu) / y)
     for i in range(max_iter):
         u_plus = u / (u_tau + 1e-12)
         ku = KAPPA * u_plus
@@ -141,9 +141,9 @@ class WallFunction(Boundary):
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
-        y = torch.tensor(1.0, device=flow.f.device, dtype=flow.f.dtype)
+        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
 
-        u_tau, yplus, re_tau = compute_wall_quantities(flow, 1 , is_top=True if self.wall == "top" else False)
+        u_tau, yplus, re_tau = compute_wall_quantities(flow, y , is_top=True if self.wall == "top" else False)
 
         tau_w = rho * u_tau**2
 

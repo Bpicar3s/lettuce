@@ -7,7 +7,7 @@ from ... import Reporter
 __all__ = ['VTKReporter']
 
 
-def write_vtk(point_dict, id=0, filename_base="./data/output"):
+def write_vtk(point_dict, id=0, filename_base="./data/output_h20_t30"):
     vtk.gridToVTK(f"{filename_base}_{id:08d}",
                   np.arange(0, point_dict["p"].shape[0]),
                   np.arange(0, point_dict["p"].shape[1]),
@@ -18,7 +18,7 @@ def write_vtk(point_dict, id=0, filename_base="./data/output"):
 class VTKReporter(Reporter):
     """General VTK Reporter for velocity and pressure"""
 
-    def __init__(self, interval=50, filename_base="./data/output"):
+    def __init__(self, interval=50, filename_base="./data/output_h20_t30"):
         super().__init__(interval)
         self.filename_base = filename_base
         directory = os.path.dirname(filename_base)

@@ -9,5 +9,5 @@ def test_write_vtk(tmpdir):
                              mach_number=0.05)
     p, u = flow.initial_pu()
     point_dict = {"p": context.convert_to_ndarray(p[0, ..., None])}
-    write_vtk(point_dict, id=1, filename_base=tmpdir / "output")
+    write_vtk(point_dict, id=1, filename_base=tmpdir / "output_h20_t30")
     assert os.path.isfile(tmpdir / "output_00000001.vtr")

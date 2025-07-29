@@ -76,10 +76,10 @@ exclude_patterns = ['_build', 'Thumbs.db', '.DS_Store']
 # The name of the Pygments (syntax highlighting) style to use.
 pygments_style = 'sphinx'
 
-# If true, `todo` and `todoList` produce output, else they produce nothing.
+# If true, `todo` and `todoList` produce output_h20_t30, else they produce nothing.
 todo_include_todos = False
 
-# -- Options for HTML output -------------------------------------------
+# -- Options for HTML output_h20_t30 -------------------------------------------
 
 # The theme to use for HTML and HTML Help pages.  See the documentation for
 # a list of builtin themes.
@@ -97,12 +97,12 @@ html_theme = 'alabaster'
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
 
-# -- Options for HTMLHelp output ---------------------------------------
+# -- Options for HTMLHelp output_h20_t30 ---------------------------------------
 
 # Output file base name for HTML help builder.
 htmlhelp_basename = 'lettucedoc'
 
-# -- Options for LaTeX output ------------------------------------------
+# -- Options for LaTeX output_h20_t30 ------------------------------------------
 
 latex_elements = {
     # The paper size ('letterpaper' or 'a4paper').
@@ -131,7 +131,7 @@ latex_documents = [
      u'Andreas Kraemer', 'manual'),
 ]
 
-# -- Options for manual page output ------------------------------------
+# -- Options for manual page output_h20_t30 ------------------------------------
 
 # One entry per manual page. List of tuples
 # (source start file, name, description, authors, manual section).
@@ -141,7 +141,7 @@ man_pages = [
      [author], 1)
 ]
 
-# -- Options for Texinfo output ----------------------------------------
+# -- Options for Texinfo output_h20_t30 ----------------------------------------
 
 # Grouping the document tree into Texinfo files. List of tuples
 # (source start file, target name, title, author,

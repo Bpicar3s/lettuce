@@ -36,7 +36,7 @@ simulation.reporter.append(lt.VTKReporter(
 ))
 
 """
-We now add a reporter which we access later. The output can be written to files
+We now add a reporter which we access later. The output_h20_t30 can be written to files
 specified by out="reporter.txt"
 """
 energy = lt.IncompressibleKineticEnergy(flow)

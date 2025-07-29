@@ -9,7 +9,7 @@ def test_vtk_reporter_no_mask(tmpdir):
     collision = BGKCollision(tau=flow.units.relaxation_parameter_lu)
     simulation = Simulation(flow, collision, [])
     vtk_reporter = VTKReporter(interval=1,
-                               filename_base=tmpdir / "output")
+                               filename_base=tmpdir / "output_h20_t30")
     simulation.reporter.append(vtk_reporter)
     simulation(2)
     assert os.path.isfile(tmpdir / "output_00000000.vtr")

@@ -16,12 +16,12 @@ def test_HDF5Reporter(tmpdir):
     hdf5_reporter = HDF5Reporter(flow=flow,
                                  collision=collision,
                                  interval=step,
-                                 filebase=tmpdir / "output")
+                                 filebase=tmpdir / "output_h20_t30")
     simulation.reporter.append(hdf5_reporter)
     simulation(step)
-    assert os.path.isfile(tmpdir / "output.h5")
+    assert os.path.isfile(tmpdir / "output_h20_t30.h5")
 
-    dataset_train = LettuceDataset(filebase=tmpdir / "output.h5",
+    dataset_train = LettuceDataset(filebase=tmpdir / "output_h20_t30.h5",
                                    target=True)
     train_loader = torch.utils.data.DataLoader(dataset_train, shuffle=False)
     print(dataset_train)
