@@ -77,8 +77,22 @@ def compute_wall_quantities(flow, dy, is_top: bool):
         u=torch.sqrt(u[0,mask]**2+u[2,mask]**2),
         nu=viscosity,
     )
-    utau = torch.sqrt((u[0,mask]**2+u[2,mask]**2)*viscosity/dy)
+    utau = torch.sqrt((u[0, mask] ** 2 + u[2, mask] ** 2) * viscosity / dy)
     yplus = dy * utau / viscosity
+
+    # Maske für log-law Bereich
+    loglaw_mask = yplus >= 11.81
+
+    # Log-law utau nur für die betroffenen Stellen berechnen
+    utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
+                8 / 7)
+
+    # Alte utau-Werte an diesen Stellen ersetzen
+    utau[loglaw_mask] = utau_log
+
+    # yplus entsprechend neu berechnen
+    yplus = dy * utau / viscosity
+
     re_tau = (dy * ny / 2) * utau / viscosity
 
     return utau, yplus, re_tau
@@ -134,7 +148,6 @@ class WallFunction(Boundary):
 
 
         rho = flow.rho()
-        rho = rho[:,mask_fluidcell]
         u = flow.u()
 
         u_x = u[0][mask_fluidcell]
@@ -145,7 +158,7 @@ class WallFunction(Boundary):
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, y , is_top=True if self.wall == "top" else False)
 
-        tau_w = rho * u_tau**2
+        tau_w = rho[:,mask_fluidcell] * u_tau**2
 
         if torch.isnan(tau_w).any() or torch.isinf(tau_w).any():
             self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
