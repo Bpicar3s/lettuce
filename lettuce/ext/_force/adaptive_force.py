@@ -23,8 +23,8 @@ class AdaptiveForce:
         self.last_force_lu = context.convert_to_tensor([0.0] * self.flow.stencil.d)
 
     def compute_force(self):
-        utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=0.5, is_top=True)
-        utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=0.5, is_top=False)
+        utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=True)
+        utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=False)
         print("y+:", int(y_plus.mean()),"Re_tau:", int(re_tau.mean()))
         utau_mean_lu = 0.5 * (utau_b_lu.mean() + utau_t_lu.mean())
         ux_mean_lu = self.global_ux()

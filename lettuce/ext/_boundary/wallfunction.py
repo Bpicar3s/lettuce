@@ -141,7 +141,7 @@ class WallFunction(Boundary):
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
-        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
+        y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, y , is_top=True if self.wall == "top" else False)
 
@@ -168,18 +168,18 @@ class WallFunction(Boundary):
             flow.f[15, self.mask] = f17_old + tau_z_field[self.mask]
             flow.f[16, self.mask] = f17_old + tau_z_field[self.mask]
             flow.f[18, self.mask] = f16_old - tau_z_field[self.mask]
-            flow.f[8,  self.mask] = f16_old - tau_z_field[self.mask]
+            flow.f[17,  self.mask] = f16_old - tau_z_field[self.mask]
             flow.f[7,  self.mask] = f10_old + tau_x_field[self.mask]
-            flow.f[17, self.mask] = f10_old + tau_x_field[self.mask]
+            flow.f[8, self.mask] = f10_old + tau_x_field[self.mask]
             flow.f[9,  self.mask] = f8_old - tau_x_field[self.mask]
             flow.f[10, self.mask] = f8_old - tau_x_field[self.mask]
         elif self.wall == 'top':
             flow.f[17, self.mask] = f15_old + tau_z_field[self.mask]
             flow.f[18, self.mask] = f15_old + tau_z_field[self.mask]
             flow.f[16, self.mask] = f18_old - tau_z_field[self.mask]
-            flow.f[9,  self.mask] = f18_old - tau_z_field[self.mask]
+            flow.f[15,  self.mask] = f18_old - tau_z_field[self.mask]
             flow.f[10, self.mask] = f7_old + tau_x_field[self.mask]
-            flow.f[15, self.mask] = f7_old + tau_x_field[self.mask]
+            flow.f[9, self.mask] = f7_old + tau_x_field[self.mask]
             flow.f[8,  self.mask] = f9_old - tau_x_field[self.mask]
             flow.f[7,  self.mask] = f9_old - tau_x_field[self.mask]
 
