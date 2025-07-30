@@ -147,6 +147,6 @@ class ChannelFlow3D(ExtFlow):
 
         wfb_bottom = WallFunction(mask=self.mask_bottom, stencil = self.stencil, h=self.h, context=self.context, wall='bottom')
         wfb_top = WallFunction(mask=self.mask_top, stencil = self.stencil, h=self.h, context=self.context, wall='top')
-        wfb_bottom=BounceBackBoundary(mask = self.mask_top)
-        wfb_top=BounceBackBoundary(mask = self.mask_bottom)
+        #wfb_bottom=BounceBackBoundary(mask = self.mask_top)
+        #wfb_top=BounceBackBoundary(mask = self.mask_bottom)
         return [wfb_bottom, wfb_top]
