@@ -37,7 +37,7 @@ def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
                                        total_derivative)
 
         delta = residual / total_derivative
-        delta = torch.clamp(delta, min=-0.1, max=0.1)
+        #delta = torch.clamp(delta, min=-0.1, max=0.1)
 
         u_tau_new = u_tau - delta
 
@@ -77,7 +77,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
         u=torch.sqrt(u[0,mask]**2+u[2,mask]**2),
         nu=viscosity,
     )
-
+    utau = torch.sqrt((u[0,mask]**2+u[2,mask]**2)*viscosity/dy)
     yplus = dy * utau / viscosity
     re_tau = (dy * ny / 2) * utau / viscosity
 
