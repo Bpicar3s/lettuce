@@ -10,7 +10,7 @@ class AdaptiveForce:
     def __init__(self, flow, context, target_u_m_lu,
                  wall_bottom, wall_top,
                  global_ux_reporter,
-                 base_lbm_tau_lu):
+                 base_lbm_tau_lu, mask):
         self.flow = flow
         self.context = context
         self.u_m = target_u_m_lu
@@ -21,7 +21,7 @@ class AdaptiveForce:
         self.base_lbm_tau = base_lbm_tau_lu
         self.ueq_scaling_factor = 0.5
         self.last_force_lu = context.convert_to_tensor([0.0] * self.flow.stencil.d)
-
+        self.mask = mask
     def compute_force(self):
         utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=True)
         utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=False)
@@ -35,7 +35,9 @@ class AdaptiveForce:
     def __call__(self, u_field_lu, f):
         self.compute_force()
         guo_force = Guo(flow  =self.flow, tau=self.flow.units.relaxation_parameter_lu, acceleration=self.last_force_lu)
-        return guo_force.source_term(u_field_lu)
+        forcefield = guo_force.source_term(u_field_lu)
+        return guo_force.source_term(u_field_lu) * self.mask.to(forcefield.dtype)[None, ...]
+
 
     def source_term(self, u_field_lu):
         return self.__call__(u_field_lu, None)
