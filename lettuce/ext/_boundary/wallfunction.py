@@ -178,23 +178,23 @@ class WallFunction(Boundary):
         flow.f = torch.where(self.mask, flow.f[self.stencil.opposite], flow.f)
 
         if self.wall == 'bottom':
-            flow.f[15, self.mask] = f17_old + tau_z_field[self.mask]
-            flow.f[16, self.mask] = f17_old + tau_z_field[self.mask]
-            flow.f[18, self.mask] = f16_old - tau_z_field[self.mask]
-            flow.f[17,  self.mask] = f16_old - tau_z_field[self.mask]
-            flow.f[7,  self.mask] = f10_old + tau_x_field[self.mask]
-            flow.f[8, self.mask] = f10_old + tau_x_field[self.mask]
-            flow.f[9,  self.mask] = f8_old - tau_x_field[self.mask]
-            flow.f[10, self.mask] = f8_old - tau_x_field[self.mask]
+            flow.f[15, self.mask] = f17_old + tau_x_field[self.mask]
+            flow.f[16, self.mask] = f17_old + tau_x_field[self.mask]
+            flow.f[18, self.mask] = f16_old - tau_x_field[self.mask]
+            flow.f[17,  self.mask] = f16_old - tau_x_field[self.mask]
+            flow.f[7,  self.mask] = f10_old + tau_z_field[self.mask]
+            flow.f[8, self.mask] = f10_old + tau_z_field[self.mask]
+            flow.f[9,  self.mask] = f8_old - tau_z_field[self.mask]
+            flow.f[10, self.mask] = f8_old - tau_z_field[self.mask]
         elif self.wall == 'top':
-            flow.f[17, self.mask] = f15_old + tau_z_field[self.mask]
-            flow.f[18, self.mask] = f15_old + tau_z_field[self.mask]
-            flow.f[16, self.mask] = f18_old - tau_z_field[self.mask]
-            flow.f[15,  self.mask] = f18_old - tau_z_field[self.mask]
-            flow.f[10, self.mask] = f7_old + tau_x_field[self.mask]
-            flow.f[9, self.mask] = f7_old + tau_x_field[self.mask]
-            flow.f[8,  self.mask] = f9_old - tau_x_field[self.mask]
-            flow.f[7,  self.mask] = f9_old - tau_x_field[self.mask]
+            flow.f[17, self.mask] = f15_old + tau_x_field[self.mask]
+            flow.f[18, self.mask] = f15_old + tau_x_field[self.mask]
+            flow.f[16, self.mask] = f18_old - tau_x_field[self.mask]
+            flow.f[15,  self.mask] = f18_old - tau_x_field[self.mask]
+            flow.f[10, self.mask] = f7_old + tau_z_field[self.mask]
+            flow.f[9, self.mask] = f7_old + tau_z_field[self.mask]
+            flow.f[8,  self.mask] = f9_old - tau_z_field[self.mask]
+            flow.f[7,  self.mask] = f9_old - tau_z_field[self.mask]
 
         self.tau_x = tau_x_field
         self.tau_z = tau_z_field
