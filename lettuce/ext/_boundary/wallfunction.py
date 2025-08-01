@@ -9,7 +9,6 @@ import torch
 
 
 def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
-
     KAPPA = 0.4187
     B = 5.5
     E = 9.793
@@ -58,6 +57,9 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     :param is_top: True für obere Wand, sonst untere
     :return: (u_tau, y+, Re_tau) als Tensors
     """
+    method = "Log-Visc"
+
+
     if is_top == True:
         mask = torch.zeros(flow.resolution, dtype=torch.bool)
         mask[:, -2, :] = True
@@ -72,23 +74,27 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     ny = u.shape[1]
 
 
-    utau = solve_u_tau_exact(
-        y=dy,
-        u=torch.sqrt(u[0,mask]**2+u[2,mask]**2),
-        nu=viscosity,
-    )
-    utau = torch.sqrt((u[0, mask] ** 2 + u[2, mask] ** 2) * viscosity / dy)
-    yplus = dy * utau / viscosity
+    if method == "Spalding":
 
-    # Maske für log-law Bereich
-    loglaw_mask = yplus >= 11.81
+        utau = solve_u_tau_exact(
+            y=dy,
+            u=torch.sqrt(u[0,mask]**2+u[2,mask]**2),
+            nu=viscosity,
+        )
 
-    # Log-law utau nur für die betroffenen Stellen berechnen
-    utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
-                8 / 7)
+    elif method == "Log-Visc":
+        utau = torch.sqrt((u[0, mask] ** 2 + u[2, mask] ** 2) * viscosity / dy)
+        yplus = dy * utau / viscosity
 
-    # Alte utau-Werte an diesen Stellen ersetzen
-    utau[loglaw_mask] = utau_log
+        # Maske für log-law Bereich
+        loglaw_mask = yplus >= 11.81
+
+        # Log-law utau nur für die betroffenen Stellen berechnen
+        utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
+                    8 / 7)
+
+        # Alte utau-Werte an diesen Stellen ersetzen
+        utau[loglaw_mask] = utau_log
 
     # yplus entsprechend neu berechnen
     yplus = dy * utau / viscosity
