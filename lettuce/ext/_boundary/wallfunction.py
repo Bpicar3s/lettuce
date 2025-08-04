@@ -99,7 +99,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     # yplus entsprechend neu berechnen
     yplus = dy * utau / viscosity
 
-    re_tau = (dy * ny / 2) * utau / viscosity
+    re_tau = (ny / 2) * utau / viscosity
 
     return utau, yplus, re_tau
 

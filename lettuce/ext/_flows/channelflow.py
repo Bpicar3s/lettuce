@@ -13,14 +13,17 @@ class ChannelFlow3D(ExtFlow):
                  resolution: Union[int, List[int]],
                  reynolds_number: float,
                  mach_number: float,
+                 bbtype,
                  stencil: Optional['Stencil'] = None,
                  equilibrium: Optional['Equilibrium'] = None):
+
         self.h = resolution if isinstance(resolution, int) else resolution[1] // 2
         self._mask = None  # erst nach resolution verfügbar
         super().__init__(context, resolution, reynolds_number,
                          mach_number, stencil, equilibrium)
         self.mask_top = None
         self.mask_bottom = None
+        self.bbtype = bbtype
 
     def make_resolution(self, resolution: Union[int, List[int]],
                         stencil: Optional['Stencil'] = None) -> List[int]:
@@ -79,7 +82,7 @@ class ChannelFlow3D(ExtFlow):
         u[0] = u_base * (1 - self.mask.astype(float))
 
         # --- 2. 🎛️ Sinusmoden-Störung (deterministisch) ---
-        A_sin = 0.5  # 5% Amplitude
+        A_sin = 1  # 5% Amplitude
         Lx, Ly, Lz = xg.max(), yg.max(), zg.max()
         sinus_modes = [(1, 1, 1), (2, 2, 3), (3, 2, 1)]
 
@@ -90,7 +93,7 @@ class ChannelFlow3D(ExtFlow):
             u[0] += A_sin * mode * envelope
 
         # --- 3. 🌪️ Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
-        A_psi = 0.5  # Amplitude der Störung
+        A_psi = 1  # Amplitude der Störung
         random_psi = (np.random.rand(3, nx, ny, nz) - 0.5) * 2
 
         # FFT-Filterung für glatte Wirbel (wie im alten Code)
@@ -137,16 +140,22 @@ class ChannelFlow3D(ExtFlow):
 
     @property
     def boundaries(self):
+
         shape = self.resolution
         self.mask_bottom = torch.zeros(shape, dtype=torch.bool, device=self.context.device)
         self.mask_bottom[:, 0, :] = True
         self.mask_top = torch.zeros(shape, dtype=torch.bool, device=self.context.device)
         self.mask_top[:, -1, :] = True
 
+        if self.bbtype == "wallfunction":
+
+            wfb_bottom = WallFunction(mask=self.mask_bottom, stencil=self.stencil, h=self.h, context=self.context,
+                                      wall='bottom')
+            wfb_top = WallFunction(mask=self.mask_top, stencil=self.stencil, h=self.h, context=self.context, wall='top')
+
+        elif self.bbtype == "fullway":
 
 
-        wfb_bottom = WallFunction(mask=self.mask_bottom, stencil = self.stencil, h=self.h, context=self.context, wall='bottom')
-        wfb_top = WallFunction(mask=self.mask_top, stencil = self.stencil, h=self.h, context=self.context, wall='top')
-        #wfb_bottom=BounceBackBoundary(mask = self.mask_top)
-        #wfb_top=BounceBackBoundary(mask = self.mask_bottom)
+            wfb_bottom=BounceBackBoundary(mask = self.mask_top)
+            wfb_top=BounceBackBoundary(mask = self.mask_bottom)
         return [wfb_bottom, wfb_top]
