@@ -69,7 +69,6 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
 
     u = flow.u()
-    rho = flow.rho()
     viscosity = flow.units.viscosity_lu
     ny = u.shape[2]
 
@@ -100,7 +99,6 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     yplus = dy * utau / viscosity
 
     re_tau = (ny / 2) * utau / viscosity
-
     return utau, yplus, re_tau
 
 
@@ -160,7 +158,7 @@ class WallFunction(Boundary):
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
-        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
+        y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
 
