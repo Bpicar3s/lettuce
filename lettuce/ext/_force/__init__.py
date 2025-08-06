@@ -5,5 +5,6 @@ from .shan_chen import *
 __all__ = [
     'Force',
     'Guo',
-    'ShanChen'
+    'ShanChen',
+    'Kupershtokh'
 ]

@@ -82,7 +82,7 @@ class ChannelFlow3D(ExtFlow):
         u[0] = u_base * (1 - self.mask.astype(float))
 
         # --- 2. 🎛️ Sinusmoden-Störung (deterministisch) ---
-        A_sin = 1  # 5% Amplitude
+        A_sin = 2  # 5% Amplitude
         Lx, Ly, Lz = xg.max(), yg.max(), zg.max()
         sinus_modes = [(1, 1, 1), (2, 2, 3), (3, 2, 1)]
 
@@ -93,7 +93,7 @@ class ChannelFlow3D(ExtFlow):
             u[0] += A_sin * mode * envelope
 
         # --- 3. 🌪️ Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
-        A_psi = 1  # Amplitude der Störung
+        A_psi = 2  # Amplitude der Störung
         random_psi = (np.random.rand(3, nx, ny, nz) - 0.5) * 2
 
         # FFT-Filterung für glatte Wirbel (wie im alten Code)

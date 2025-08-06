@@ -1,7 +1,7 @@
 
 import torch
 from . import Force
-from .guo import Guo
+from .Kupershtokh import ExactDifferenceForce
 from lettuce.ext._boundary.wallfunction import compute_wall_quantities
 
 __all__ = ['AdaptiveForce']
@@ -23,8 +23,8 @@ class AdaptiveForce:
         self.last_force_lu = context.convert_to_tensor([0.0] * self.flow.stencil.d)
         self.mask = mask
     def compute_force(self):
-        utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=True)
-        utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=False)
+        utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=0.5, is_top=True)
+        utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=0.5, is_top=False)
         print("y+:", int(y_plus.mean()),"Re_tau:", int(re_tau.mean()))
         utau_mean_lu = 0.5 * (utau_b_lu.mean() + utau_t_lu.mean())
         ux_mean_lu = self.global_ux()
@@ -34,7 +34,7 @@ class AdaptiveForce:
 
     def __call__(self, u_field_lu, f):
         self.compute_force()
-        guo_force = Guo(flow  =self.flow, tau=self.flow.units.relaxation_parameter_lu, acceleration=self.last_force_lu)
+        guo_force = ExactDifferenceForce(flow  =self.flow, acceleration=self.last_force_lu)
         forcefield = guo_force.source_term(u_field_lu)
         return guo_force.source_term(u_field_lu) * self.mask.to(forcefield.dtype)[None, ...]
 

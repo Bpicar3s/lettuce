@@ -210,7 +210,7 @@ class WallQuantities(Observable):
 
     def __call__(self, f: Optional[torch.Tensor] = None):
 
-        u_tau, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=torch.tensor(1, device=self.flow.f.device, dtype=self.flow.f.dtype), is_top=True if self.wall == "top" else False)
+        u_tau, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=torch.tensor(0.5, device=self.flow.f.device, dtype=self.flow.f.dtype), is_top=True if self.wall == "top" else False)
         return torch.stack([
             u_tau.mean(),
             y_plus.mean(),
