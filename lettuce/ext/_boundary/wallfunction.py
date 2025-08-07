@@ -15,7 +15,7 @@ def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
     A = torch.exp(torch.tensor(-KAPPA * B, device=u.device, dtype=u.dtype))
     u_tau= torch.sqrt(u * y / nu)
     u_tau = 0.05 * u
-    u_tau = torch.sqrt((u * nu) / y)
+    #u_tau = torch.sqrt((u * nu) / y)
     for i in range(max_iter):
         u_plus = u / (u_tau + 1e-12)
         ku = KAPPA * u_plus
@@ -83,17 +83,17 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
     elif method == "Log-Visc":
         utau = torch.sqrt((u[0, mask] ** 2 + u[2, mask] ** 2) * viscosity / dy)
-        yplus = dy * utau / viscosity
+        #yplus = dy * utau / viscosity
 
         # Maske für log-law Bereich
-        loglaw_mask = yplus >= 11.81
+        #loglaw_mask = yplus >= 11.81
 
         # Log-law utau nur für die betroffenen Stellen berechnen
-        utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
-                    8 / 7)
+        #utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
+        #            8 / 7)
 
         # Alte utau-Werte an diesen Stellen ersetzen
-        utau[loglaw_mask] = utau_log
+        #utau[loglaw_mask] = utau_log
 
     # yplus entsprechend neu berechnen
     yplus = dy * utau / viscosity
@@ -171,38 +171,30 @@ class WallFunction(Boundary):
             self.Re_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
             return flow.f
 
-        tau_x = - (u_x / safe_u) * tau_w
-        tau_z = - (u_z / safe_u) * tau_w
-
-        tau_x_field = torch.zeros_like(u[0])
-        tau_z_field = torch.zeros_like(u[2] if self.stencil.d == 3 else u[0])
-        tau_x_field[self.mask] = 0.5*tau_x
-        tau_z_field[self.mask] = 0.5*tau_z
+        tau_x_field = - (u_x / safe_u) * 0.5 * tau_w
+        tau_z_field = - (u_z / safe_u) * 0.5 * tau_w
 
         flow.f = torch.where(self.mask, flow.f[self.stencil.opposite], flow.f)
 
         if self.wall == 'bottom':
-            flow.f[15, self.mask] = f17_old + tau_x_field[self.mask]
-            flow.f[16, self.mask] = f17_old + tau_x_field[self.mask]
-            flow.f[18, self.mask] = f16_old - tau_x_field[self.mask]
-            flow.f[17,  self.mask] = f16_old - tau_x_field[self.mask]
-            flow.f[7,  self.mask] = f10_old + tau_z_field[self.mask]
-            flow.f[8, self.mask] = f10_old + tau_z_field[self.mask]
-            flow.f[9,  self.mask] = f8_old - tau_z_field[self.mask]
-            flow.f[10, self.mask] = f8_old - tau_z_field[self.mask]
+            flow.f[15, self.mask] = f17_old + tau_x_field
+            flow.f[16, self.mask] = f17_old + tau_x_field
+            flow.f[18, self.mask] = f16_old - tau_x_field
+            flow.f[17,  self.mask] = f16_old - tau_x_field
+            flow.f[7,  self.mask] = f10_old + tau_z_field
+            flow.f[8, self.mask] = f10_old + tau_z_field
+            flow.f[9,  self.mask] = f8_old - tau_z_field
+            flow.f[10, self.mask] = f8_old - tau_z_field
         elif self.wall == 'top':
-            flow.f[17, self.mask] = f15_old + tau_x_field[self.mask]
-            flow.f[18, self.mask] = f15_old + tau_x_field[self.mask]
-            flow.f[16, self.mask] = f18_old - tau_x_field[self.mask]
-            flow.f[15,  self.mask] = f18_old - tau_x_field[self.mask]
-            flow.f[10, self.mask] = f7_old + tau_z_field[self.mask]
-            flow.f[9, self.mask] = f7_old + tau_z_field[self.mask]
-            flow.f[8,  self.mask] = f9_old - tau_z_field[self.mask]
-            flow.f[7,  self.mask] = f9_old - tau_z_field[self.mask]
+            flow.f[17, self.mask] = f15_old + tau_x_field
+            flow.f[18, self.mask] = f15_old + tau_x_field
+            flow.f[16, self.mask] = f18_old - tau_x_field
+            flow.f[15,  self.mask] = f18_old - tau_x_field
+            flow.f[10, self.mask] = f7_old + tau_z_field
+            flow.f[9, self.mask] = f7_old + tau_z_field
+            flow.f[8,  self.mask] = f9_old - tau_z_field
+            flow.f[7,  self.mask] = f9_old - tau_z_field
 
-        self.tau_x = tau_x_field
-        self.tau_z = tau_z_field
-        self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
         self.u_tau_mean = u_tau.mean()
         # Lokales y_plus wie gehabt
         self.y_plus_mean = (y * u_tau / flow.units.viscosity_lu).mean()
@@ -217,7 +209,6 @@ class WallFunction(Boundary):
             self.u_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
             self.y_plus_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
             self.Re_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
-
 
         return flow.f
 
