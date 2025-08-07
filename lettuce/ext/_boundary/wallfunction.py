@@ -82,18 +82,18 @@ def compute_wall_quantities(flow, dy, is_top: bool):
         )
 
     elif method == "Log-Visc":
-        utau = torch.sqrt((u[0, mask] ** 2 + u[2, mask] ** 2) * viscosity / dy)
-        #yplus = dy * utau / viscosity
+        utau = torch.sqrt(torch.sqrt(u[0, mask] ** 2 + u[2, mask] ** 2) * viscosity / dy)
+        yplus = dy * utau / viscosity
 
         # Maske für log-law Bereich
-        #loglaw_mask = yplus >= 11.81
+        loglaw_mask = yplus >= 11.81
 
         # Log-law utau nur für die betroffenen Stellen berechnen
-        #utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
-        #            8 / 7)
+        utau_log = ((u[0, mask][loglaw_mask] ** 2 + u[2, mask][loglaw_mask] ** 2) / 8.3 * (viscosity / dy) ** (1 / 7)) ** (
+                    8 / 7)
 
         # Alte utau-Werte an diesen Stellen ersetzen
-        #utau[loglaw_mask] = utau_log
+        utau[loglaw_mask] = utau_log
 
     # yplus entsprechend neu berechnen
     yplus = dy * utau / viscosity
