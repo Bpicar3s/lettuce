@@ -13,9 +13,18 @@ def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
     B = 5.5
     E = 9.793
     A = torch.exp(torch.tensor(-KAPPA * B, device=u.device, dtype=u.dtype))
-    u_tau= torch.sqrt(u * y / nu)
-    u_tau = 0.05 * u
-    #u_tau = torch.sqrt((u * nu) / y)
+    u_tau = torch.sqrt(u * nu / y)
+    yplus = y * u_tau / nu
+
+    # Maske für log-law Bereich
+    loglaw_mask = yplus >= 11.81
+
+    # Log-law utau nur für die betroffenen Stellen berechnen
+    utau_log = ((u[loglaw_mask] ** 2) / 8.3 * (nu / y) ** (1 / 7)) ** (
+            8 / 7)
+
+    # Alte utau-Werte an diesen Stellen ersetzen
+    u_tau[loglaw_mask] = utau_log
     for i in range(max_iter):
         u_plus = u / (u_tau + 1e-12)
         ku = KAPPA * u_plus
@@ -57,7 +66,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     :param is_top: True für obere Wand, sonst untere
     :return: (u_tau, y+, Re_tau) als Tensors
     """
-    method = "Log-Visc"
+    method = "Spalding"
 
 
     if is_top == True:
