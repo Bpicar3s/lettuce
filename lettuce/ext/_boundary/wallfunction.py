@@ -8,52 +8,67 @@ import torch
 
 
 
-def solve_u_tau_exact(y, u, nu, max_iter=100, tol=1e-8):
-    KAPPA = 0.4187
-    B = 5.5
-    E = 9.793
-    A = torch.exp(torch.tensor(-KAPPA * B, device=u.device, dtype=u.dtype))
-    u_tau = torch.sqrt(u * nu / y)
-    yplus = y * u_tau / nu
+def solve_u_tau_exact(y, u, nu,
+                                max_iter=10, tol=1e-8,
+                                KAPPA=0.4187, B=5.5, damping=1.0, eps=1e-14):
+        """
+        Löst für einen festen Wandabstand y (Skalar) und einen Vektor u (LU)
+        elementweise parallel auf der GPU:
 
-    # Maske für log-law Bereich
-    loglaw_mask = yplus >= 11.81
+            y+ = u+ + A [exp(k u+) - 1 - k u+ - (k u+)^2/2 - (k u+)^3/6]
+            u+ = u / u_tau,   y+ = y * u_tau / nu,   A = exp(-KAPPA*B)
 
-    # Log-law utau nur für die betroffenen Stellen berechnen
-    utau_log = ((u[loglaw_mask] ** 2) / 8.3 * (nu / y) ** (1 / 7)) ** (
-            8 / 7)
+        Rückgabe:
+            u_tau_vec  (shape wie u)
+            iter_vec   (int, benötigte Schritte je Element)
+        """
+        device = u.device
+        dtype = u.dtype
 
-    # Alte utau-Werte an diesen Stellen ersetzen
-    u_tau[loglaw_mask] = utau_log
-    for i in range(max_iter):
-        u_plus = u / (u_tau + 1e-12)
-        ku = KAPPA * u_plus
-        exp_ku = torch.exp(ku)
+        y = torch.as_tensor(y, device=device, dtype=dtype).clamp_min(eps)
+        u = torch.as_tensor(u, device=device, dtype=dtype).clamp_min(eps)
+        nu = torch.as_tensor(nu, device=device, dtype=dtype).clamp_min(eps)
 
-        f_rhs = u_plus + A * (exp_ku - 1 - ku - 0.5 * ku ** 2 - (1/6) * ku ** 3)
-        lhs = y * u_tau / nu
-        residual = lhs - f_rhs
+        A = torch.exp(torch.as_tensor(-KAPPA * B, device=device, dtype=dtype))
 
-        d_f_rhs_duplus = 1 + A * (KAPPA * exp_ku - KAPPA - KAPPA**2 * u_plus - 0.5 * KAPPA**3 * u_plus**2)
-        d_uplus_du_tau = -u / (u_tau + 1e-12)**2
-        df_du_tau = d_f_rhs_duplus * d_uplus_du_tau
-        d_lhs_du_tau = y / nu
-        total_derivative = d_lhs_du_tau - df_du_tau
+        # Startwert: viskose Näherung + Log-Kick für große y+
+        utau = torch.sqrt((u * nu / y).clamp_min(eps))
+        yplus0 = y * utau / nu
+        mask_log = yplus0 >= 11.0
+        if mask_log.any():
+            denom = (1.0 / KAPPA) * torch.log((y * utau / nu).clamp_min(eps)) + B
+            utau = torch.where(mask_log, (u / denom.clamp_min(1e-8)).clamp_min(eps), utau)
 
-        total_derivative = torch.where(torch.abs(total_derivative) < 1e-10,
-                                       torch.full_like(total_derivative, 1e-10),
-                                       total_derivative)
+        iters = torch.zeros_like(utau, dtype=torch.int32)
+        active = torch.ones_like(utau, dtype=torch.bool)
 
-        delta = residual / total_derivative
-        #delta = torch.clamp(delta, min=-0.1, max=0.1)
+        for _ in range(max_iter):
+            if not active.any():
+                break
 
-        u_tau_new = u_tau - delta
+            u_plus = u / utau.clamp_min(eps)
+            ku = KAPPA * u_plus
+            exp_ku = torch.exp(ku.clamp(-50, 50))
 
-        if torch.max(torch.abs(delta)) < tol:
-            break
-        u_tau = u_tau_new
+            rhs = u_plus + A * (exp_ku - 1.0 - ku - 0.5 * ku ** 2 - (1.0 / 6.0) * ku ** 3)
+            lhs = y * utau / nu
+            F = lhs - rhs
 
-    return u_tau
+            drhs_duplus = 1.0 + A * (KAPPA * exp_ku - KAPPA - (KAPPA ** 2) * u_plus - 0.5 * (KAPPA ** 3) * u_plus ** 2)
+            duplus_dutau = -u / utau.clamp_min(eps).pow(2)
+            dF = (y / nu) - drhs_duplus * duplus_dutau
+            dF = torch.where(dF.abs() < 1e-14, dF.sign() * 1e-14 + (dF == 0) * 1e-14, dF)
+
+            delta = F / dF
+            utau_new = (utau - damping * delta).clamp_min(eps)
+
+            utau = torch.where(active, utau_new, utau)
+            conv = delta.abs() < tol
+            just = active & conv
+            active = active & (~conv)
+            iters = iters + just.to(iters.dtype) + active.to(iters.dtype)
+
+        return utau
 
 def compute_wall_quantities(flow, dy, is_top: bool):
     """
@@ -66,7 +81,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     :param is_top: True für obere Wand, sonst untere
     :return: (u_tau, y+, Re_tau) als Tensors
     """
-    method = "Log-Visc"
+    method = "Spalding"
 
 
     if is_top == True:
