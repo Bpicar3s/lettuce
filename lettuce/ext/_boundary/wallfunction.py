@@ -1,5 +1,7 @@
 from ... import Boundary, Flow, Context
 import torch
+from ...cuda_native.ext import NativeBounceBackBoundary
+
 __all__ = ["WallFunction"]
 
 import torch
@@ -243,9 +245,10 @@ class WallFunction(Boundary):
         return None
 
     def native_available(self) -> bool:
-        return False
+        return True
 
-    def native_generator(self):
-        pass
+    def native_generator(self, index: int) -> 'NativeBoundary':
+        return NativeBounceBackBoundary(index)
+
 
 
