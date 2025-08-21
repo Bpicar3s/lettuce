@@ -27,9 +27,11 @@ class BGKCollision(Collision):
         return self.__class__.__name__
 
     def native_available(self) -> bool:
+        # Native-Run ist möglich, wenn die Force auch native verfügbar ist (oder keine Force genutzt wird).
         return self.force is None or self.force.native_available()
 
-    def native_generator(self) -> 'NativeCollision':
+    def native_generator(self) -> 'NativeBGKCollision':
+        # Reiche das native Force-Objekt an NativeBGKCollision weiter (falls vorhanden).
         if self.force is not None:
             return NativeBGKCollision(self.force.native_generator())
         return NativeBGKCollision()
