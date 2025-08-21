@@ -1,6 +1,6 @@
 from ... import Boundary, Flow, Context
 import torch
-from ...cuda_native.ext import NativeBounceBackBoundary
+from ...cuda_native.ext import Wallfunction
 
 __all__ = ["WallFunction"]
 
@@ -249,8 +249,33 @@ class WallFunction(Boundary):
     def native_available(self) -> bool:
         return True
 
+    # ext/_boundary/wallfunction.py
+    # In your high-level Python WallFunction class file...
+
     def native_generator(self, index: int) -> 'NativeBoundary':
-        return NativeBounceBackBoundary(index)
+        # Import the native class
+        from lettuce.cuda_native.ext._boundary.wallfunction import Wallfunction
+
+        # Create an instance of the native Wallfunction class
+        native_instance = Wallfunction(
+            mask=self.mask,
+            stencil=self.stencil,
+            h=self.h,
+            context=self.context,
+            wall=getattr(self, "wall", "bottom"),
+            kappa=self.kappa,
+            B=self.B,
+            max_iter=self.max_iter,
+            tol=self.tol
+        )
+
+        # --- THIS IS THE CRUCIAL FIX ---
+        # Manually assign the index that lettuce provided.
+        native_instance.index = index
+
+        # Return the fully configured native instance
+        return native_instance
+
 
 
 class WallFunction2(Boundary):

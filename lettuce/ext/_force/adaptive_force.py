@@ -3,7 +3,7 @@ import torch
 from . import Force
 from .Kupershtokh import ExactDifferenceForce
 from lettuce.ext._boundary.wallfunction import compute_wall_quantities
-
+from ...cuda_native.ext._force import adaptiveForce
 __all__ = ['AdaptiveForce']
 
 class AdaptiveForce:
@@ -48,3 +48,24 @@ class AdaptiveForce:
         index = [Ellipsis] + [None] * self.flow.stencil.d
         denom = torch.where(rho < 1e-10, torch.tensor(1e-10, device=rho.device, dtype=rho.dtype), rho)
         return self.ueq_scaling_factor * self.last_force_lu[index] / denom
+
+    def native_available(self) -> bool:
+        return True
+
+    def native_generator(self):
+        # OHNE Argumente!
+        from lettuce.cuda_native.ext._force.adaptiveForce import AdaptiveForce as NativeAdaptiveForce
+        # falls du pro Step Kraft brauchst, initial einmal berechnen
+        if getattr(self, "_native_inst", None) is None:
+            self.compute_force()
+            # baue deine native Instanz; alles Nötige hier intern bereitstellen
+            self._native_inst = NativeAdaptiveForce(
+                flow=self.flow,
+                context=self.context,
+                target_u_m_lu=float(self.u_m),
+                base_lbm_tau_lu=float(self.base_lbm_tau),
+                mask=self.mask,
+                use_mask_in_native=True,
+                pass_tau_as_param=False,
+            )
+        return self._native_inst
