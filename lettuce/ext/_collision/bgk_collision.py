@@ -21,6 +21,18 @@ class BGKCollision(Collision):
         si = self.force.source_term(u) if self.force is not None else 0
         return flow.f - 1.0 / self.tau * (flow.f - feq) + si
 
+    def set_on_simulation(self, simulation: 'Simulation'):
+        """
+        Wird vom Simulator aufgerufen. Hier registriert die Kollision
+        ihre Kraft-Update-Funktion automatisch als Callback.
+        """
+        # Prüft, ob eine "schlaue" Kraft vorhanden ist
+        if self.force is not None and hasattr(self.force, 'update_native_force_on_simulation'):
+            # 1. Sagt der Kraft, welches Simulationsobjekt sie steuern soll
+            self.force.set_on_simulation(simulation)
+            # 2. Hängt die Update-Funktion der Kraft an die To-Do-Liste des Simulators
+            simulation.callbacks.append(self.force.update_native_force_on_simulation)
+
     def name(self) -> AnyStr:
         if self.force is not None:
             return f"{self.__class__.__name__}_{self.force.__class__.__name__}"
