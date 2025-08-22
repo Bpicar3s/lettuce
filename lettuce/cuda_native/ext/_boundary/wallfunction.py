@@ -74,28 +74,60 @@ class Wallfunction(NativeBoundary):
             scalar_t u_tau = 0.0;
 
             if (u_mag > 1e-12) {{
+                // --- 1:1 Übersetzung der robusten Python-Logik ---
+
+                // Konstanten aus der Python-Klasse
                 const scalar_t KAPPA = {self.kappa};
                 const scalar_t B = {self.B};
                 const scalar_t A = exp(-KAPPA * B);
                 const scalar_t eps = 1e-14;
-                u_tau = sqrt(u_mag * nu / y);
 
+                // 1. Intelligenter Startwert (aus Python übernommen)
+                u_tau = sqrt(u_mag * nu / y);
+                scalar_t yplus0 = y * u_tau / nu;
+
+                if (yplus0 >= 11.81) {{
+                    scalar_t denom = (1.0 / KAPPA) * log(yplus0) + B;
+                    if (denom > eps) {{
+                        u_tau = u_mag / denom;
+                    }}
+                }}
+                u_tau = std::max(eps, u_tau); // Sicherstellen, dass u_tau nicht negativ/null ist
+
+                // 2. Newton-Solver-Schleife
                 for (int it = 0; it < {self.max_iter}; ++it) {{
                     scalar_t u_plus = u_mag / (u_tau + eps);
+
+                    // Robuster exp()-Aufruf mit Clamp (aus Python übernommen)
                     scalar_t ku = KAPPA * u_plus;
-                    scalar_t rhs = u_plus + A * (exp(ku) - 1.0 - ku - 0.5 * ku * ku - (1.0/6.0) * ku * ku * ku);
+                    ku = std::max((scalar_t)-50.0, std::min((scalar_t)50.0, ku));
+
+                    scalar_t exp_ku = exp(ku);
+
+                    scalar_t rhs = u_plus + A * (exp_ku - 1.0 - ku - 0.5 * ku * ku - (1.0/6.0) * ku * ku * ku);
                     scalar_t lhs = y * u_tau / nu;
                     scalar_t F = lhs - rhs;
-                    scalar_t drhs_duplus = 1.0 + A * (KAPPA * exp(ku) - KAPPA - KAPPA*KAPPA * u_plus - 0.5 * KAPPA*KAPPA*KAPPA * u_plus*u_plus);
+
+                    scalar_t drhs_duplus = 1.0 + A * (KAPPA * exp_ku - KAPPA - KAPPA*KAPPA * u_plus - 0.5 * KAPPA*KAPPA*KAPPA * u_plus*u_plus);
                     scalar_t duplus_dutau = -u_mag / ((u_tau + eps) * (u_tau + eps));
                     scalar_t dF = (y / nu) - drhs_duplus * duplus_dutau;
-                    if (fabs(dF) < eps) {{ dF = eps; }}
+
+                    // Division durch Null bei dF verhindern (aus Python übernommen)
+                    if (fabs(dF) < 1e-14) {{
+                         dF = (dF >= 0) ? 1e-14 : -1e-14;
+                    }}
+
                     scalar_t delta = F / dF;
-                    u_tau = std::max(eps, u_tau - delta);
-                    if (fabs(delta) < {self.tol}) {{ break; }}
+                    u_tau -= delta; // Damping ist 1.0
+                    u_tau = std::max(eps, u_tau);
+
+                    if (fabs(delta) < {self.tol}) {{
+                        break;
+                    }}
                 }}
             }}
 
+            // Berechnung der Wandschubspannung (bleibt gleich)
             const scalar_t tau_w = rho_loc * u_tau * u_tau;
             scalar_t tau_x_field = 0.0;
             scalar_t tau_z_field = 0.0;
