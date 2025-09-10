@@ -153,9 +153,9 @@ class Wallfunction(NativeBoundary):
                 scalar_t bounce[19];
             """)
             for i in range(19):
-                g.append_pipeline_buffer(f"                bounce[{i}] = f_reg[{g.stencil.opposite[i]}];")
+                g.append_pipeline_buffer(f"bounce[{i}] = f_reg[{g.stencil.opposite[i]}];")
             for i in range(19):
-                g.append_pipeline_buffer(f"                f_reg[{i}] = bounce[{i}];")
+                g.append_pipeline_buffer(f"f_reg[{i}] = bounce[{i}];")
 
             g.append_pipeline_buffer(f"""
                 // 3. Tau-Korrektur
