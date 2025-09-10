@@ -32,10 +32,8 @@ class Wallfunction(NativeBoundary):
             g.append_global_buffer("#include <cmath>")
             g.append_global_buffer("#include <algorithm>")
             g._math_headers_added = True
-            opposite_list = ",".join(str(i) for i in self.stencil.opposite.cpu().tolist())
+            opposite_list = ",".join(str(i) for i in self.stencil.opposite)
             g.append_global_buffer(f"const int opposite[19] = {{{opposite_list}}};")
-
-        # 💡 KORREKTUR HIER: Alle Datenpfade zeigen jetzt auf simulation.flow
 
         if not g.launcher_hooked("rho_tensor"):
             g.launcher_hook("rho_tensor", "const at::Tensor rho_tensor", "rho_tensor", "simulation.flow.rho()")
