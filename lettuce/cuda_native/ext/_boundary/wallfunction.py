@@ -32,8 +32,11 @@ class Wallfunction(NativeBoundary):
             g.append_global_buffer("#include <cmath>")
             g.append_global_buffer("#include <algorithm>")
             g._math_headers_added = True
+            opposite_list = ",".join(str(i) for i in self.stencil.opposite.cpu().tolist())
+            g.append_global_buffer(f"const int opposite[19] = {{{opposite_list}}};")
 
         # 💡 KORREKTUR HIER: Alle Datenpfade zeigen jetzt auf simulation.flow
+
         if not g.launcher_hooked("rho_tensor"):
             g.launcher_hook("rho_tensor", "const at::Tensor rho_tensor", "rho_tensor", "simulation.flow.rho()")
         if not g.kernel_hooked("rho_tensor"):
@@ -74,6 +77,7 @@ class Wallfunction(NativeBoundary):
             scalar_t u_tau = 0.0;
 
             if (u_mag > 1e-12) {{
+                
                 // --- 1:1 Übersetzung der robusten Python-Logik ---
 
                 // Konstanten aus der Python-Klasse
@@ -140,20 +144,62 @@ class Wallfunction(NativeBoundary):
 
         if self.wall == 'bottom':
             g.append_pipeline_buffer(f"""
-                const scalar_t f17_old = f_reg[17]; const scalar_t f16_old = f_reg[16];
-                const scalar_t f10_old = f_reg[10]; const scalar_t f8_old  = f_reg[8];
-                f_reg[15] = f17_old + tau_x_field; f_reg[16] = f17_old + tau_x_field;
-                f_reg[18] = f16_old - tau_x_field; f_reg[17] = f16_old - tau_x_field;
-                f_reg[7]  = f10_old + tau_z_field; f_reg[8]  = f10_old + tau_z_field;
-                f_reg[9]  = f8_old - tau_z_field; f_reg[10] = f8_old - tau_z_field;
+                // --- WallFunction: BOTTOM wall ---
+                // 1. Alte f-Werte sichern
+                const scalar_t f17_old = f_reg[17];
+                const scalar_t f16_old = f_reg[16];
+                const scalar_t f10_old = f_reg[10];
+                const scalar_t f8_old  = f_reg[8];
+
+                // 2. Spiegelung (Bounce-Back)
+                scalar_t bounce[19];
             """)
+            for i in range(19):
+                g.append_pipeline_buffer(f"                bounce[{i}] = f_reg[{g.stencil.opposite[i]}];")
+            for i in range(19):
+                g.append_pipeline_buffer(f"                f_reg[{i}] = bounce[{i}];")
+
+            g.append_pipeline_buffer(f"""
+                // 3. Tau-Korrektur
+                f_reg[15] = f17_old + tau_x_field;
+                f_reg[16] = f17_old + tau_x_field;
+                f_reg[18] = f16_old - tau_x_field;
+                f_reg[17] = f16_old - tau_x_field;
+
+                f_reg[7]  = f10_old + tau_z_field;
+                f_reg[8]  = f10_old + tau_z_field;
+                f_reg[9]  = f8_old - tau_z_field;
+                f_reg[10] = f8_old - tau_z_field;
+            """)
+
         elif self.wall == 'top':
             g.append_pipeline_buffer(f"""
-                const scalar_t f15_old = f_reg[15]; const scalar_t f18_old = f_reg[18];
-                const scalar_t f7_old  = f_reg[7]; const scalar_t f9_old  = f_reg[9];
-                f_reg[17] = f15_old + tau_x_field; f_reg[18] = f15_old + tau_x_field;
-                f_reg[16] = f18_old - tau_x_field; f_reg[15] = f18_old - tau_x_field;
-                f_reg[10] = f7_old + tau_z_field; f_reg[9]  = f7_old + tau_z_field;
-                f_reg[8]  = f9_old - tau_z_field; f_reg[7]  = f9_old - tau_z_field;
+                // --- WallFunction: TOP wall ---
+                // 1. Alte f-Werte sichern
+                const scalar_t f15_old = f_reg[15];
+                const scalar_t f18_old = f_reg[18];
+                const scalar_t f7_old  = f_reg[7];
+                const scalar_t f9_old  = f_reg[9];
+
+                // 2. Spiegelung (Bounce-Back)
+                scalar_t bounce[19];
             """)
+            for i in range(19):
+                g.append_pipeline_buffer(f"                bounce[{i}] = f_reg[{g.stencil.opposite[i]}];")
+            for i in range(19):
+                g.append_pipeline_buffer(f"                f_reg[{i}] = bounce[{i}];")
+
+            g.append_pipeline_buffer(f"""
+                // 3. Tau-Korrektur
+                f_reg[17] = f15_old + tau_x_field;
+                f_reg[18] = f15_old + tau_x_field;
+                f_reg[16] = f18_old - tau_x_field;
+                f_reg[15] = f18_old - tau_x_field;
+
+                f_reg[10] = f7_old + tau_z_field;
+                f_reg[9]  = f7_old + tau_z_field;
+                f_reg[8]  = f9_old - tau_z_field;
+                f_reg[7]  = f9_old - tau_z_field;
+            """)
+
         g.append_pipeline_buffer("}")
