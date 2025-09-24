@@ -132,7 +132,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
 
 class WallFunction(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.41, B=5.2, max_iter = 100, tol = 1e-8):
+    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8):
         self.context = context
 
         self.mask = self.context.convert_to_tensor(mask)

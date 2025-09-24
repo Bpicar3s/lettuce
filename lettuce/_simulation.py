@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from . import *
 from .cuda_native import NativeCollision, Generator
 
-__all__ = ['Collision', 'Reporter', 'Simulation', 'SimulationReducedTGV']
+__all__ = ['Collision', 'Reporter', 'Simulation', 'SimulationReducedTGV', 'SimulationHybrid']
 
 
 class Collision(ABC):
@@ -227,4 +227,48 @@ class SimulationReducedTGV(Simulation):
             self._report()
         end = timer()
 
+        return num_steps * self.flow.rho().numel() / 1e6 / (end - beg)
+
+class SimulationHybrid(Simulation):
+    def __init__(self, flow: 'Flow', collision: 'Collision', reporter: List['Reporter']):
+        super().__init__(flow, collision, reporter)
+
+        # ⚡ Native-Komponenten getrennt erzeugen
+        self.native_collision = (
+            collision.native_generator() if collision.native_available() else None
+        )
+        self.native_streaming = NativeStandardStreaming.create(
+            support_no_streaming_mask=self.no_streaming_mask is not None
+        )
+
+    def __call__(self, num_steps):
+        beg = timer()
+        if self.flow.i == 0:
+            self._report()
+
+        for _ in range(num_steps):
+            # 1) Collision
+            if self.native_collision is not None:
+                self.flow.f = self.native_collision(self.flow)
+            else:
+                self.flow.f = self.collision(self.flow)
+
+            # 2) Boundary (Python)
+            for boundary in self.boundaries[1:]:
+                self.flow.f = boundary(self.flow)
+
+            # 3) Streaming
+            if self.native_streaming is not None:
+                self.flow.f = self.native_streaming(self.flow)
+            else:
+                self._stream()
+
+            # 4) Adaptive Force
+            if self.collision.force is not None:
+                self.collision.force.update(self.flow)
+
+            self.flow.i += 1
+            self._report()
+
+        end = timer()
         return num_steps * self.flow.rho().numel() / 1e6 / (end - beg)
