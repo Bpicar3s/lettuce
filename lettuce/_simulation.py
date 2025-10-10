@@ -65,7 +65,9 @@ class Simulation:
         # leave the masks uninitialised
         self.no_collision_mask = None
         self.no_streaming_mask = None
-
+        self.time_collision = 0.0
+        self.time_streaming = 0.0
+        self.time_boundaries = 0.0
         # else initialise the masks
         # based on the boundaries masks
         if len(self.boundaries) > 1:
@@ -162,6 +164,9 @@ class Simulation:
         return torch.roll(f[i], shifts=tuple(e[i]), dims=tuple(np.arange(d)))
 
     def _stream(self):
+        # NEU: Timer für Streaming
+        start_stream = timer()
+
         for i in range(1, self.flow.stencil.q):
             if self.no_streaming_mask is None:
                 self.flow.f[i] = self.__stream(self.flow.f, i,
@@ -172,20 +177,35 @@ class Simulation:
                                        self.flow.stencil.d)
                 self.flow.f[i] = torch.where(torch.eq(
                     self.no_streaming_mask[i], 1), self.flow.f[i], new_fi)
+
+        # NEU: Zeit zum Streaming-Timer addieren
+        self.time_streaming += timer() - start_stream
         return self.flow.f
 
     def _collide(self):
+        # NEU: Timer für Kollision
+        start_coll = timer()
         if self.no_collision_mask is None:
             self.flow.f = self.collision(self.flow)
-            for i, boundary in enumerate(self.boundaries[1:], start=1):
-                self.flow.f = boundary(self.flow)
         else:
             torch.where(torch.eq(self.no_collision_mask, 0),
                         self.collision(self.flow), self.flow.f,
                         out=self.flow.f)
+        # NEU: Zeit zum Kollisions-Timer addieren
+        self.time_collision += timer() - start_coll
+
+        # NEU: Timer für Boundaries
+        start_bound = timer()
+        if self.no_collision_mask is None:
+            for i, boundary in enumerate(self.boundaries[1:], start=1):
+                self.flow.f = boundary(self.flow)
+        else:
             for i, boundary in enumerate(self.boundaries[1:], start=1):
                 torch.where(torch.eq(self.no_collision_mask, i),
                             boundary(self.flow), self.flow.f, out=self.flow.f)
+        # NEU: Zeit zum Boundary-Timer addieren
+        self.time_boundaries += timer() - start_bound
+
         return self.flow.f
 
     def _report(self):
@@ -193,18 +213,49 @@ class Simulation:
             reporter(self)
 
     def __call__(self, num_steps):
+        # NEU: Timer zurücksetzen für den Fall, dass die Methode mehrfach aufgerufen wird
+        self.time_collision = 0.0
+        self.time_streaming = 0.0
+        self.time_boundaries = 0.0
+
         beg = timer()
 
         if self.flow.i == 0:
             self._report()
 
         for _ in range(num_steps):
+            # Diese Methode ruft entweder die CUDA-Version auf (keine separate Messung möglich)
+            # oder die Python-Versionen _collide() und _stream() (Messung funktioniert)
             self._collide_and_stream(self)
             self.flow.i += 1
             self._report()
 
         end = timer()
-        return num_steps * self.flow.rho().numel() / 1e6 / (end - beg)
+
+        # ================================== #
+        # NEU: Zusammenfassung am Ende ausgeben #
+        # ================================== #
+        total_measured_time = self.time_collision + self.time_streaming + self.time_boundaries
+
+        print("\n--- Simulations-Performance-Analyse ---")
+        if total_measured_time > 0:
+            p_coll = (self.time_collision / total_measured_time) * 100
+            p_stream = (self.time_streaming / total_measured_time) * 100
+            p_bound = (self.time_boundaries / total_measured_time) * 100
+
+            print(f"Kollision:  {self.time_collision:.4f}s ({p_coll:.2f}%)")
+            print(f"Streaming:  {self.time_streaming:.4f}s ({p_stream:.2f}%)")
+            print(f"Boundaries: {self.time_boundaries:.4f}s ({p_bound:.2f}%)")
+            print("-----------------------------------------")
+            print(f"Gemessene Gesamtzeit: {total_measured_time:.4f}s")
+        else:
+            print("Keine detaillierte Zeitmessung möglich (eventuell wurde der CUDA-Kernel genutzt).")
+
+        total_duration = end - beg
+        print(f"Gesamtlaufzeit der Schleife: {total_duration:.4f}s")
+        print("-----------------------------------------\n")
+
+        return num_steps * self.flow.rho().numel() / 1e6 / total_duration
 
 
 class SimulationReducedTGV(Simulation):

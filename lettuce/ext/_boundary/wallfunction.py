@@ -11,7 +11,7 @@ import torch
 
 
 def solve_u_tau_exact(y, u, nu,
-                                max_iter=10, tol=1e-8,
+                                max_iter=10, tol=1e-7,
                                 KAPPA=0.4187, B=5.5, damping=1.0, eps=1e-14):
         """
         Löst für einen festen Wandabstand y (Skalar) und einen Vektor u (LU)
@@ -36,7 +36,7 @@ def solve_u_tau_exact(y, u, nu,
         # Startwert: viskose Näherung + Log-Kick für große y+
         utau = torch.sqrt((u * nu / y).clamp_min(eps))
         yplus0 = y * utau / nu
-        mask_log = yplus0 >= 11.0
+        mask_log = yplus0 >= 11.81
         if mask_log.any():
             denom = (1.0 / KAPPA) * torch.log((y * utau / nu).clamp_min(eps)) + B
             utau = torch.where(mask_log, (u / denom.clamp_min(1e-8)).clamp_min(eps), utau)
@@ -88,10 +88,10 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
     if is_top == True:
         mask = torch.zeros(flow.resolution, dtype=torch.bool)
-        mask[:, -2, :] = True
+        mask[:, -1, :] = True
     elif is_top == False:
         mask = torch.zeros(flow.resolution, dtype=torch.bool)
-        mask[:, 1, :] = True
+        mask[:, 0, :] = True
 
 
     u = flow.u()
@@ -131,7 +131,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
 
 
-class WallFunction(Boundary):
+class WallFunction2(Boundary):
     def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8):
         self.context = context
 
@@ -238,6 +238,8 @@ class WallFunction(Boundary):
 
         return flow.f
 
+
+
     def make_no_collision_mask(self, f_shape, context):
         return self.mask
 
@@ -251,4 +253,121 @@ class WallFunction(Boundary):
         return NativeBounceBackBoundary(index)
 
 
+class WallFunction(Boundary):
+    def __init__(self, mask, stencil, h, context: 'Context', wall='bottom', kappa=0.4187, B=5.5, max_iter=100,
+                 tol=1e-8):
+        self.context = context
+
+        self.mask = self.context.convert_to_tensor(mask)
+        self.stencil = stencil
+        self.h = h
+        self.wall = wall
+        self.kappa = kappa
+        self.B = B
+        self.max_iter = max_iter
+        self.tol = tol
+
+        self.tau_x = None
+        self.tau_z = None
+
+        self.u_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
+        self.y_plus_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
+        self.Re_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
+        self.previous_u_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
+
+    def __call__(self, flow: Flow):
+
+        if self.wall == 'bottom':
+            f17_old = flow.f[17, self.mask].clone()
+            f16_old = flow.f[16, self.mask].clone()
+            f10_old = flow.f[10, self.mask].clone()
+            f8_old = flow.f[8, self.mask].clone()
+
+        elif self.wall == 'top':
+            f15_old = flow.f[15, self.mask].clone()
+            f18_old = flow.f[18, self.mask].clone()
+            f7_old = flow.f[7, self.mask].clone()
+            f9_old = flow.f[9, self.mask].clone()
+        else:
+            raise ValueError("wall must be 'bottom' or 'top'")
+
+        if self.wall == 'bottom':
+            mask_fluidcell = torch.zeros_like(self.mask, dtype=torch.bool)
+            mask_fluidcell[:, 0, :] = True
+        elif self.wall == 'top':
+            mask_fluidcell = torch.zeros_like(self.mask, dtype=torch.bool)
+            mask_fluidcell[:, -1, :] = True
+
+        rho = flow.rho()
+        u = flow.u()
+
+        u_x = u[0][mask_fluidcell]
+        u_z = u[2][mask_fluidcell]
+        safe_u = torch.sqrt(u_x ** 2 + u_z ** 2)
+
+        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
+
+        u_tau, yplus, re_tau = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
+
+        tau_w = rho[:, mask_fluidcell] * u_tau ** 2
+
+        if torch.isnan(tau_w).any() or torch.isinf(tau_w).any():
+            self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
+            self.u_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
+            self.y_plus_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
+            self.Re_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
+            return flow.f
+
+        tau_x_field = - (u_x / safe_u) * 0.5 * tau_w
+        tau_z_field = - (u_z / safe_u) * 0.5 * tau_w
+
+        flow.f = torch.where(self.mask, flow.f[self.stencil.opposite], flow.f)
+
+        if self.wall == 'bottom':
+            flow.f[15, self.mask] = f17_old + tau_x_field
+            flow.f[16, self.mask] = f17_old + tau_x_field
+            flow.f[18, self.mask] = f16_old - tau_x_field
+            flow.f[17, self.mask] = f16_old - tau_x_field
+            flow.f[7, self.mask] = f10_old + tau_z_field
+            flow.f[8, self.mask] = f10_old + tau_z_field
+            flow.f[9, self.mask] = f8_old - tau_z_field
+            flow.f[10, self.mask] = f8_old - tau_z_field
+        elif self.wall == 'top':
+            flow.f[17, self.mask] = f15_old + tau_x_field
+            flow.f[18, self.mask] = f15_old + tau_x_field
+            flow.f[16, self.mask] = f18_old - tau_x_field
+            flow.f[15, self.mask] = f18_old - tau_x_field
+            flow.f[10, self.mask] = f7_old + tau_z_field
+            flow.f[9, self.mask] = f7_old + tau_z_field
+            flow.f[8, self.mask] = f9_old - tau_z_field
+            flow.f[7, self.mask] = f9_old - tau_z_field
+
+        self.u_tau_mean = u_tau.mean()
+        # Lokales y_plus wie gehabt
+        self.y_plus_mean = (y * u_tau / flow.units.viscosity_lu).mean()
+
+        # Korrektes Re_tau
+
+        self.Re_tau_mean = re_tau.mean()
+
+        if torch.isnan(self.u_tau_mean) or torch.isinf(self.u_tau_mean) or \
+                torch.isnan(self.y_plus_mean) or torch.isinf(self.y_plus_mean) or \
+                torch.isnan(self.Re_tau_mean) or torch.isinf(self.Re_tau_mean):
+            self.u_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
+            self.y_plus_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
+            self.Re_tau_mean = torch.tensor(0.0, device=flow.f.device, dtype=flow.f.dtype)
+
+        return flow.f
+
+    def make_no_collision_mask(self, f_shape, context):
+        return self.mask
+
+    def make_no_streaming_mask(self, f_shape, context):
+        return None
+
+    def native_available(self) -> bool:
+        return True
+
+    def native_generator(self, index: int) -> 'NativeBoundary':
+        return NativeBounceBackBoundary(index)
 
