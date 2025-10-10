@@ -308,7 +308,6 @@ class WallFunction(Boundary):
         y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
-
         tau_w = rho[:, mask_fluidcell] * u_tau ** 2
 
         if torch.isnan(tau_w).any() or torch.isinf(tau_w).any():
