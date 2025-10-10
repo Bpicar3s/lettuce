@@ -88,10 +88,10 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
     if is_top == True:
         mask = torch.zeros(flow.resolution, dtype=torch.bool)
-        mask[:, -1, :] = True
+        mask[:, -2, :] = True
     elif is_top == False:
         mask = torch.zeros(flow.resolution, dtype=torch.bool)
-        mask[:, 0, :] = True
+        mask[:, 1, :] = True
 
 
     u = flow.u()
@@ -131,7 +131,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
 
 
-class WallFunction2(Boundary):
+class WallFunction(Boundary):
     def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8):
         self.context = context
 
@@ -253,7 +253,7 @@ class WallFunction2(Boundary):
         return NativeBounceBackBoundary(index)
 
 
-class WallFunction(Boundary):
+class WallFunction2(Boundary):
     def __init__(self, mask, stencil, h, context: 'Context', wall='bottom', kappa=0.4187, B=5.5, max_iter=100,
                  tol=1e-8):
         self.context = context

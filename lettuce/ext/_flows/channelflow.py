@@ -127,8 +127,8 @@ class ChannelFlow3D(ExtFlow):
         u += u_psi
 
         # Geschwindigkeit an den Wänden auf Null setzen
-        #u[:, :, 0, :] = 0.0
-        #u[:, :, -1, :] = 0.0
+        u[:, :, 0, :] = 0.0
+        u[:, :, -1, :] = 0.0
 
         # --- 5. Konvertierung zu PyTorch Tensoren ---
         # Wichtig: Die Arrays müssen in PyTorch Tensoren mit dem korrekten
