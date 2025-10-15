@@ -199,11 +199,10 @@ class ObservableReporter(Reporter):
 
 
 class WallQuantities(Observable):
-    def __init__(self, mask, wall, flow, boundary, context = None):
+    def __init__(self, mask, wall, flow, context = None):
         self.wall = wall
         self.mask = mask
         self.flow = flow
-        self.boundary = boundary
         self.context = context
         # Ensure the boundary object has the expected attributes, initialized to tensors
         # (This is already handled by your WallFunctionBoundaryTest __init__)
@@ -288,7 +287,8 @@ class AdaptiveAcceleration(Observable):
         return acc[0]
 
 class WallfunctionReporter(Observable):
-    def __init__(self, flow, collision_py, no_collision_mask, wfb_bottom, wfb_top):
+    def __init__(self, context, flow, collision_py, no_collision_mask, wfb_bottom, wfb_top):
+        self.context = context
         self.flow = flow
         self.collision_py = collision_py
         self.no_collision_mask = no_collision_mask  # 🔗 übergeben von außen
@@ -296,7 +296,7 @@ class WallfunctionReporter(Observable):
         self.wfb_top = wfb_top
 
     @torch.no_grad()
-    def __call__(self, f=None):
+    def __call__(self, f):
         # (1) Python-Kollision nur auf Zellen ohne Maskierung (z. B. erste Fluidreihe)
         torch.where(torch.eq(self.no_collision_mask, 0),
                     self.collision_py(self.flow), self.flow.f,
@@ -305,6 +305,12 @@ class WallfunctionReporter(Observable):
         # (2) Danach Wandfunktionen aufrufen (lesen u und rho nach Collision)
         self.wfb_bottom(self.flow)
         self.wfb_top(self.flow)
+
+        #torch.where(torch.eq(self.wfb_top.mask, 0),
+        #            self.wfb_top(self.flow), self.flow.f, out=self.flow.f)
+        #torch.where(torch.eq(self.wfb_bottom.mask, 0),
+        #            self.wfb_bottom(self.flow), self.flow.f, out=self.flow.f)
+
 
         # (3) Optional Logging
         return torch.tensor([

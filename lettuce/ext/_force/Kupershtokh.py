@@ -1,7 +1,7 @@
 import torch
 from lettuce.util import append_axes
 from . import Force
-
+from lettuce.cuda_native.ext._force.Kupershtokh import NativeExactDifferenceForce
 __all__ = ['ExactDifferenceForce']
 
 
@@ -61,7 +61,10 @@ class ExactDifferenceForce(Force):
         return 0.5
 
     def native_available(self) -> bool:
-        return False
+        """Signalisiert Lettuce, dass eine schnelle native Implementierung existiert."""
+        return True
 
     def native_generator(self):
-        return None
+        """Gibt eine Instanz des C++ Code-Generators zurück."""
+        # Erstellt und gibt eine Instanz der Klasse aus Schritt 1 zurück
+        return NativeExactDifferenceForce(self)
