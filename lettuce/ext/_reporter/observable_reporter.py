@@ -11,7 +11,7 @@ from packaging import version
 from lettuce.ext._boundary.wallfunction import compute_wall_quantities
 __all__ = ['Observable', 'ObservableReporter', 'MaximumVelocity',
            'IncompressibleKineticEnergy', 'Enstrophy', 'EnergySpectrum',
-           'Mass', 'GlobalMeanUXReporter', 'WallQuantities']
+           'Mass', 'GlobalMeanUXReporter', 'WallQuantities', 'AdaptiveAcceleration', 'WallfunctionReporter']
 
 
 class Observable(ABC):
@@ -225,3 +225,89 @@ class GlobalMeanUXReporter(Observable):
         current_mean_ux_lu = torch.mean(u_x_spatial)
         return current_mean_ux_lu
 
+from lettuce.ext._boundary.wallfunction import compute_wall_quantities
+class AdaptiveAcceleration(Observable):
+    """
+    Berechnet periodisch die Beschleunigung a(t) in LU und
+    schreibt sie direkt in force.acceleration (ExactDifferenceForce).
+    Wird vom ObservableReporter alle 'interval' Schritte aufgerufen.
+    """
+
+    def __init__(self, flow, force_obj, target_mean_ux_lu,
+                 context,
+                 k_gain: float = 1.0):
+        super().__init__(flow)
+        self.force = force_obj
+        self.target_mean_ux_lu = target_mean_ux_lu
+        self.context = context
+        self.k_gain = k_gain
+
+        # interner Zustand (aktueller Beschleunigungsvektor in LU)
+        self.current_accel = context.convert_to_tensor(
+            [0.0] * flow.stencil.d, dtype=flow.f.dtype
+        )
+
+    @torch.no_grad()
+    def compute_acceleration(self):
+        """
+        Neue a(t) berechnen:
+        - utau aus top/bottom
+        - globalen <u_x>
+        - einfacher P-Regler auf Zielgeschwindigkeit
+        """
+        # utau unten/oben (achte auf is_top)
+        utau_b, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
+        utau_t, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
+        utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
+
+        # globaler Mittelwert ux
+        u_field = self.flow.u()           # (3, Nx, Ny, Nz)
+        ux_mean = torch.mean(u_field[0])  # Skalar (LU)
+
+        # Basis-Gradient + P-Korrektur auf Ziel <ux>
+        H = max(float(self.flow.h), 1.0)  # Schutz gegen 0
+        Fx_base = (utau_mean ** 2) / H
+        Fx_reg  = self.k_gain * (self.target_mean_ux_lu - ux_mean) * (self.target_mean_ux_lu / H)
+        Fx = (Fx_base + Fx_reg).to(device=self.context.device, dtype=self.flow.f.dtype)
+
+        # nur x-Komponente aktiv
+        acc = torch.stack([Fx] + [torch.zeros_like(Fx)] * (self.flow.stencil.d - 1))
+        self.current_accel = acc
+
+        # 💡 direkte Verbindung: ExactDifferenceForce bekommt neue a(t)
+        self.force.acceleration = acc
+        return acc
+
+    def __call__(self, f=None):
+        """
+        Wird vom ObservableReporter aufgerufen.
+        Wir berechnen hier a(t) neu und geben z. B. ax zurück (für Logging).
+        """
+        acc = self.compute_acceleration()
+        # Rückgabe: ax als Skalar (für Reporter-CSV oder Print)
+        return acc[0]
+
+class WallfunctionReporter(Observable):
+    def __init__(self, flow, collision_py, no_collision_mask, wfb_bottom, wfb_top):
+        self.flow = flow
+        self.collision_py = collision_py
+        self.no_collision_mask = no_collision_mask  # 🔗 übergeben von außen
+        self.wfb_bottom = wfb_bottom
+        self.wfb_top = wfb_top
+
+    @torch.no_grad()
+    def __call__(self, f=None):
+        # (1) Python-Kollision nur auf Zellen ohne Maskierung (z. B. erste Fluidreihe)
+        torch.where(torch.eq(self.no_collision_mask, 0),
+                    self.collision_py(self.flow), self.flow.f,
+                    out=self.flow.f)
+
+        # (2) Danach Wandfunktionen aufrufen (lesen u und rho nach Collision)
+        self.wfb_bottom(self.flow)
+        self.wfb_top(self.flow)
+
+        # (3) Optional Logging
+        return torch.tensor([
+            float(self.wfb_bottom.u_tau_mean),
+            float(self.wfb_top.u_tau_mean)
+        ], device=self.flow.f.device)
