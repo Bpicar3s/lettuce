@@ -97,16 +97,16 @@ class newsuperTGV3D(Boundary):
         for i in range(6):
             for j in range(len(self.switch_stencil_wall[i])):
                 if i == 3:
-                    flow.f[self.switch_stencil_wall[i][j][1], *self.swap_w[i][1]] = \
+                    flow.f[(self.switch_stencil_wall[i][j][1], self.swap_w[i][1])] = \
                         torch.transpose(self.f_copies[self.switch_stencil_wall[i][j][0], :, :, i], 0, 1)
 
                 else:
-                    flow.f[self.switch_stencil_wall[i][j][1], *self.swap_w[i][1]] = \
+                    flow.f[(self.switch_stencil_wall[i][j][1], self.swap_w[i][1])] = \
                         self.f_copies[self.switch_stencil_wall[i][j][0], :, :, i]
 
         for i in range(12):
             for j in range(len(self.switch_stencil_borders[i])):
-                flow.f[self.switch_stencil_borders[i][j][1], *self.borders[i]] = \
+                flow.f[(self.switch_stencil_borders[i][j][1], self.borders[i])] = \
                     self.f_copies_borders[self.switch_stencil_borders[i][j][0], :, i]
 
         if any(inner for inner in self.switch_stencil_corner):
@@ -114,7 +114,7 @@ class newsuperTGV3D(Boundary):
                                           (26, 25)]
             for i in range(8):
                 index = self.switch_stencil_corner[i]
-                flow.f[index[0], *self.corners[index[0] - 19]] = \
+                flow.f[(index[0], self.corners[index[0] - 19])] = \
                     self.f_copies_corners[index[1], index[1] - 19]
 
         return flow.f
