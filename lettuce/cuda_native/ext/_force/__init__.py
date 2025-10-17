@@ -1,6 +1,5 @@
 # __init__.py
-from ._force import NativeForce, NativeGuoForce
-from .adaptiveForce import AdaptiveForce
+from .Kupershtokh import NativeExactDifferenceForce
 
-__all__ = [
+__all__ = ['NativeExactDifferenceForce'
 ]

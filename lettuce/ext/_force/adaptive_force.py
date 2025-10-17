@@ -1,71 +1,130 @@
-
 import torch
-from . import Force
-from .Kupershtokh import ExactDifferenceForce
+from lettuce import Force
+from lettuce.ext import Guo
 from lettuce.ext._boundary.wallfunction import compute_wall_quantities
-from ...cuda_native.ext._force import adaptiveForce
-__all__ = ['AdaptiveForce']
+from ...cuda_native.ext._force._force import NativeGuoForce
 
-class AdaptiveForce:
-    def __init__(self, flow, context, target_u_m_lu,
-                 wall_bottom, wall_top,
-                 global_ux_reporter,
-                 base_lbm_tau_lu, mask):
+__all__ = ["AdaptiveForce"]
+
+
+class AdaptiveForce(Force):
+    """
+    Korrigierte dual-mode adaptive Kraft.
+    Funktioniert sowohl im Python-Modus als auch im nativen CUDA-Modus.
+    """
+
+    def __init__(self, flow, context, target_u_m_lu, base_lbm_tau_lu, mask=None):
         self.flow = flow
         self.context = context
-        self.u_m = target_u_m_lu
-        self.wall_bottom = wall_bottom
-        self.wall_top = wall_top
-        self.global_ux = global_ux_reporter
-        self.H = flow.h
-        self.base_lbm_tau = base_lbm_tau_lu
-        self.ueq_scaling_factor = 0.5
-        self.last_force_lu = context.convert_to_tensor([0.0] * self.flow.stencil.d)
+        self.u_m = float(target_u_m_lu)
+        self.base_lbm_tau = float(base_lbm_tau_lu)
         self.mask = mask
+
+        # Simulation-Referenz für native Pfad
+        self.simulation = None
+
+        d = flow.stencil.d
+        self.last_force_lu = context.convert_to_tensor([0.0] * d)
+
+        # Für den Python-Pfad: Guo-Instanz
+        self.python_guo = Guo(self.flow, self.base_lbm_tau, self.last_force_lu)
+
+        # Für den Native-Pfad: Lazy erstellt
+        self.native = None
+
+    def update_native_force_on_simulation(self, i, t, f):
+        """Callback-Funktion: Berechnet Kraft neu und aktualisiert Simulation."""
+        if self.simulation is None:
+            return
+
+        # Kraft berechnen
+        current_force = self.compute_force()
+
+        # Simulation aktualisieren
+        self.simulation.force_ax = float(current_force[0].item())
+        if self.flow.stencil.d > 1:
+            self.simulation.force_ay = float(current_force[1].item()) if len(current_force) > 1 else 0.0
+        if self.flow.stencil.d > 2:
+            self.simulation.force_az = float(current_force[2].item()) if len(current_force) > 2 else 0.0
+
+    def set_on_simulation(self, simulation):
+        """Wird vom Simulator aufgerufen: Initialisiert native Kraft."""
+        self.simulation = simulation
+
+        # Initiale Kraft berechnen
+        initial_force = self.compute_force()
+        simulation.force_ax = float(initial_force[0].item())
+        simulation.force_ay = float(initial_force[1].item()) if len(initial_force) > 1 else 0.0
+        simulation.force_az = float(initial_force[2].item()) if len(initial_force) > 2 else 0.0
+
+        # Mask setzen (falls vorhanden)
+        if self.mask is not None:
+            simulation.force_mask = self.mask.to(torch.uint8)
+
+        # WICHTIG: Callback registrieren
+        if hasattr(simulation, 'callbacks'):
+            simulation.callbacks.append(self.update_native_force_on_simulation)
+
     def compute_force(self):
-        utau_b_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=True)
-        utau_t_lu, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=1, is_top=False)
-        #print("y+:", int(y_plus.mean()),"Re_tau:", int(re_tau.mean()))
-        utau_mean_lu = 0.5 * (utau_b_lu.mean() + utau_t_lu.mean())
-        u_field_lu = self.flow.u()  # u_field_lu: shape (3, Nx, Ny, Nz)
-        ux_mean_lu = torch.mean(u_field_lu[0])
-        Fx_lu = (utau_mean_lu ** 2) / self.H + (self.u_m - ux_mean_lu) * (self.u_m / self.H)
-        self.last_force_lu = self.context.convert_to_tensor([Fx_lu] + [0.0] * (self.flow.stencil.d - 1))
+        """Berechnet adaptive Kraft basierend auf Wandschubspannung."""
+        device = self.flow.f.device
+        dtype = self.flow.f.dtype
+        dy = torch.as_tensor(0.5, device=device, dtype=dtype)
+
+        # Wandschubspannung berechnen
+        utau_top, _, _ = compute_wall_quantities(flow=self.flow, dy=dy, is_top=True)
+        utau_bot, _, _ = compute_wall_quantities(flow=self.flow, dy=dy, is_top=False)
+        utau_mean = 0.5 * (utau_top.mean() + utau_bot.mean())
+
+        # Mittlere Geschwindigkeit
+        ux_mean = self.flow.u()[0].mean()
+
+        # Adaptive Kraft berechnen
+        Fx = (utau_mean ** 2) / self.flow.h + (self.u_m - ux_mean) * (self.u_m / self.flow.h)
+
+        # Kraft-Vektor erstellen
+        vec = [0.0] * self.flow.stencil.d
+        vec[0] = float(Fx)
+        self.last_force_lu = self.context.convert_to_tensor(vec)
+
         return self.last_force_lu
 
-    def __call__(self, u_field_lu, f):
-        self.compute_force()
-        guo_force = ExactDifferenceForce(flow  =self.flow, acceleration=self.last_force_lu)
-        forcefield = guo_force.source_term(u_field_lu)
-        return guo_force.source_term(u_field_lu) * self.mask.to(forcefield.dtype)[None, ...]
+    # --- Python-Pfad Methoden ---
+    def source_term(self, u):
+        """Source-Term für Python-Simulation."""
+        current_force = self.compute_force()
+        self.python_guo.acceleration = current_force
+        source = self.python_guo.source_term(u)
 
+        # Maske anwenden falls vorhanden
+        if self.mask is not None:
+            source *= self.mask.to(source.dtype)[None, ...]
 
-    def source_term(self, u_field_lu):
-        return self.__call__(u_field_lu, None)
+        return source
 
-    def u_eq(self, f):
-        rho = self.flow.rho()
-        index = [Ellipsis] + [None] * self.flow.stencil.d
+    def u_eq(self, flow):
+        """Gleichgewichts-Velocity-Shift für Python-Pfad."""
+        current_force = self.compute_force()  # Kraft aktualisieren
+        rho = flow.rho()
+        # Division durch Null vermeiden
         denom = torch.where(rho < 1e-10, torch.tensor(1e-10, device=rho.device, dtype=rho.dtype), rho)
-        return self.ueq_scaling_factor * self.last_force_lu[index] / denom
+        index = [Ellipsis] + [None] * flow.stencil.d
+        return self.ueq_scaling_factor * current_force[index] / denom
 
+    @property
+    def ueq_scaling_factor(self):
+        return 0.5
+
+    # --- Native-Pfad Methoden ---
     def native_available(self) -> bool:
         return True
 
     def native_generator(self):
-        # OHNE Argumente!
-        from lettuce.cuda_native.ext._force.adaptiveForce import AdaptiveForce as NativeAdaptiveForce
-        # falls du pro Step Kraft brauchst, initial einmal berechnen
-        if getattr(self, "_native_inst", None) is None:
-            self.compute_force()
-            # baue deine native Instanz; alles Nötige hier intern bereitstellen
-            self._native_inst = NativeAdaptiveForce(
-                flow=self.flow,
-                context=self.context,
-                target_u_m_lu=float(self.u_m),
-                base_lbm_tau_lu=float(self.base_lbm_tau),
-                mask=self.mask,
-                use_mask_in_native=True,
-                pass_tau_as_param=False,
+        """Erstellt nativen Generator für CUDA-Pfad."""
+        if self.native is None:
+            self.native = NativeGuoForce.create(
+                stencil=self.flow.stencil,
+                tau=self.base_lbm_tau,
+                use_mask=(self.mask is not None)
             )
-        return self._native_inst
+        return self.native

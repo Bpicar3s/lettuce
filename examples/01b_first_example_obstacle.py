@@ -10,7 +10,7 @@ The context defines the default device (cpu or cuda) and datatype (e.g.,
 float32 for single, float64 for double precision).
 Native CUDA is currently not supported for the anti-bounce-back outlet.
 """
-context = lt.Context(torch.device("cuda:0"), use_native=False)
+context = lt.Context(torch.device("cuda:0"), use_native=True)
 
 """
 Flow definitions.

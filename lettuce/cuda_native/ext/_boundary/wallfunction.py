@@ -150,7 +150,7 @@ class Wallfunction(NativeBoundary):
                 const scalar_t f8_old  = f_reg[8];
 
                 // 2. Spiegelung (Bounce-Back)
-                scalar_t bounce[19];
+                scalar_t bounce[q];
             """)
             for i in range(19):
                 g.append_pipeline_buffer(f"bounce[{i}] = f_reg[{g.stencil.opposite[i]}];")
@@ -180,7 +180,7 @@ class Wallfunction(NativeBoundary):
                 const scalar_t f9_old  = f_reg[9];
 
                 // 2. Spiegelung (Bounce-Back)
-                scalar_t bounce[19];
+                scalar_t bounce[q];
             """)
             for i in range(19):
                 g.append_pipeline_buffer(f"                bounce[{i}] = f_reg[{g.stencil.opposite[i]}];")

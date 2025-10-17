@@ -1,5 +1,4 @@
-# Du kannst diese Klasse in einer neuen Datei (z.B. native/force.py)
-# oder neben der ExactDifferenceForce-Klasse platzieren.
+__all__ = ['NativeExactDifferenceForce']
 
 class NativeExactDifferenceForce:
     """
@@ -41,28 +40,62 @@ class NativeExactDifferenceForce:
         # 2. C++ Code zur Berechnung des Source Terms generieren
 
         # Lokale C++-Variablen im Kernel deklarieren
+        # Lokale C++-Variablen deklarieren (sichtbar im Kernel)
+        # Lokale C++-Variablen im Kernel deklarieren
         buffer('scalar_t u_plus[d];')
         buffer('scalar_t f_eq_plus[q];')
         buffer('scalar_t source_term[q];')
 
-        # u_plus = u + 0.5 * a berechnen
+        # u_plus = u + 0.5 * a
         buffer('// Berechne u_plus = u + 0.5 * a')
         buffer('#pragma unroll')
-        buffer('for(index_t i = 0; i < d; ++i) {')
+        buffer('for (index_t i = 0; i < d; ++i) {')
         buffer(f'    u_plus[i] = u[i] + static_cast<scalar_t>(0.5) * {accel_name}[i];')
         buffer('}')
 
-        # f_eq für u_plus berechnen (genial: wir nutzen den existierenden f_eq-Generator!)
-        buffer('// Berechne f_eq(rho, u_plus)')
-        generator.equilibrium.generate_f_eq(generator, u_var='u_plus', f_eq_var='f_eq_plus')
+        # --- NEU: f_eq(u) sichern, u -> u_plus setzen, f_eq(u_plus) generieren, alles zurücksetzen ---
 
-        # Source-Term S_i = f_eq(u+Δu) - f_eq(u) berechnen
-        # (f_eq für das normale u wurde bereits vorher von NativeBGKCollision generiert)
-        buffer('// Berechne den Source-Term S_i = f_eq_plus[i] - f_eq[i]')
+        # 1) f_eq(u) sichern
+        buffer('scalar_t f_eq_base[q];')
         buffer('#pragma unroll')
-        buffer('for(index_t i = 0; i < q; ++i) {')
+        buffer('for (index_t i = 0; i < q; ++i) {')
+        buffer('    f_eq_base[i] = f_eq[i];')
+        buffer('}')
+
+        # 2) u sichern und temporär mit u_plus überschreiben
+        buffer('scalar_t u_save[d];')
+        buffer('#pragma unroll')
+        buffer('for (index_t i = 0; i < d; ++i) {')
+        buffer('    u_save[i] = u[i];')
+        buffer('    u[i] = u_plus[i];')
+        buffer('}')
+
+        # 3) f_eq(u_plus) in den Standard-Namen f_eq schreiben lassen
+        buffer('// f_eq für (rho, u_plus) generieren (schreibt in f_eq)')
+        generator.equilibrium.generate_f_eq(generator)  # keine eigenen Namen -> nutzt u & f_eq
+
+        # 4) f_eq(u_plus) nach f_eq_plus kopieren
+        buffer('#pragma unroll')
+        buffer('for (index_t i = 0; i < q; ++i) {')
+        buffer('    f_eq_plus[i] = f_eq[i];')
+        buffer('}')
+
+        # 5) u und f_eq(u) wiederherstellen
+        buffer('#pragma unroll')
+        buffer('for (index_t i = 0; i < d; ++i) {')
+        buffer('    u[i] = u_save[i];')
+        buffer('}')
+        buffer('#pragma unroll')
+        buffer('for (index_t i = 0; i < q; ++i) {')
+        buffer('    f_eq[i] = f_eq_base[i];')
+        buffer('}')
+
+        # 6) Source-Term S_i = f_eq(u_plus) - f_eq(u)
+        buffer('// Source-Term S_i = f_eq_plus[i] - f_eq[i]')
+        buffer('#pragma unroll')
+        buffer('for (index_t i = 0; i < q; ++i) {')
         buffer('    source_term[i] = f_eq_plus[i] - f_eq[i];')
         buffer('}')
 
-        # 3. Den Namen der C++ Variable zurückgeben, die das Ergebnis enthält
+        # Ergebnis-Arrayname zurückgeben
         return "source_term"

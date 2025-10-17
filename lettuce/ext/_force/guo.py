@@ -2,7 +2,6 @@ import torch
 
 from . import Force
 from lettuce.util import append_axes
-from ...cuda_native.ext._force import NativeGuoForce
 __all__ = ['Guo']
 
 
@@ -37,8 +36,8 @@ class Guo(Force):
         return 0.5
 
     def native_available(self) -> bool:
-        return True
+        return False
 
 
     def native_generator(self):
-        return NativeGuoForce()   # keine Args erwarten
+        return None

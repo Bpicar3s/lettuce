@@ -247,7 +247,7 @@ class WallFunction(Boundary):
         return None
 
     def native_available(self) -> bool:
-        return True
+        return False
 
     # ext/_boundary/wallfunction.py
     # In your high-level Python WallFunction class file...

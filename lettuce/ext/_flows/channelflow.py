@@ -38,7 +38,16 @@ class ChannelFlow3D(ExtFlow):
                         stencil: Optional[Stencil] = None) -> List[int]:
         if isinstance(resolution, int):
             h = resolution
-            return [int(2 * np.pi * h), 2 * h, int(np.pi * h)]
+            # Originale theoretische Werte
+            lx = 2 * np.pi * h
+            ly = 2 * h
+            lz = np.pi * h
+
+            # Aufrunden auf das nächste Vielfache von 8
+            def round8(x):
+                return int(np.ceil(x / 8) * 8)
+
+            return [round8(lx), round8(ly), round8(lz)]
         assert len(resolution) == 3, "ChannelFlow3D erwartet 3D-Auflösung!"
         return resolution
 

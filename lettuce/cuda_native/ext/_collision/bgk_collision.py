@@ -65,4 +65,4 @@ class NativeBGKCollision(NativeCollision):
             buffer(f"    f_reg[i] = {collision_step};")
 
         buffer('  }')
-        buffer('}', cond=ncm)('}                                                              ', cond=ncm)
+        buffer('}', cond=ncm)

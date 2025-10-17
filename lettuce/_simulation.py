@@ -133,6 +133,7 @@ class Simulation:
             generator = Generator(self.flow.stencil, native_collision,
                                   native_boundaries, native_equilibrium)
 
+
             native_kernel = generator.resolve()
             if native_kernel is None:
 
