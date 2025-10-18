@@ -7,15 +7,19 @@ print("start")
 
 # ---------- Set up simulation -------------
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-context = lt.Context(device=device, dtype=torch.float32)  # single precision
+context = lt.Context(device=device, dtype=torch.float32, use_native = True)  # single precision
 # - torch.float64 for double precision
-resolution = 80  # resolution of the lattice, low resolution leads to
+resolution = 10  # resolution of the lattice, low resolution leads to
 # unstable speeds somewhen after 10 (PU)
 flow = lt.TaylorGreenVortex(context, resolution, 1600, 0.1, lt.D3Q27)
 
 # select collision model - try also KBCCollision or RegularizedCollision
 collision = lt.BGKCollision(tau=flow.units.relaxation_parameter_lu)
 simulation = lt.Simulation(flow, collision, [])
+nx, ny, nz = flow.resolution  # z. B. [64, 64, 64]
+
+# Beispiel 1: zufällige Testmaske (20 % True)
+simulation.no_collision_mask = torch.rand((nx, ny, nz), device=flow.context.device) > 0.8
 
 # reporters will grab the results in between simulation steps
 # (see io.py and simulation.py)
