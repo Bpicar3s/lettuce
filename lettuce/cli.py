@@ -117,7 +117,7 @@ def benchmark(ctx, steps, resolution, profile_out, flow, vtk_out,
     simulation = Simulation(flow, collision, reporter, streaming_strategy=selected_streaming_strategy)
     mlups = simulation(num_steps=steps)
 
-    # write profiling output
+    # write profiling output_h20_t30
     if profile_out:
         profile.disable()
         stats = pstats.Stats(profile)

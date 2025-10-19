@@ -40,7 +40,7 @@ print(f"Simulating {nend} steps! Maybe drink some water in the meantime.")
 print("MLUPS: ", simulation(nend))
 
 # ---------- Plot kinetic energy over time (PU) -------------
-# grab output of kinetic energy reporter
+# grab output_h20_t30 of kinetic energy reporter
 E = np.asarray(kinE_reporter.out)
 # normalize to size of grid, not always necessary
 E[:, 1] = E[:, 1] / (2 * np.pi) ** 3
@@ -68,4 +68,4 @@ ax2 = plt.subplot(1, 2, 2)
 ax2.matshow(uMagnitude)
 plt.tight_layout()
 plt.show()
-plt.savefig('data/tgv3d-output.pdf')
+plt.savefig('data/tgv3d-output_h20_t30.pdf')

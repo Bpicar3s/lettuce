@@ -25,7 +25,8 @@ __all__ = [
     "D1Q3Transform",
     "D2Q9Lallemand",
     "D2Q9Dellar",
-    "D3Q27Hermite"
+    "D3Q27Hermite",
+    "D3Q19ChavezTransform"
 ]
 
 _ALL_STENCILS = get_subclasses(Stencil, module=lettuce)
@@ -364,6 +365,39 @@ class D3Q27CumulantTransform(Transform):
    def __init__(self, lattice):
        raise NotImplementedError
 """
+
+class D3Q19ChavezTransform(Transform):
+    def __init__(self, stencil, context):
+        super().__init__(stencil, context)
+        self.matrix = context.convert_to_tensor([
+        [ 1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1,  1],
+        [ 0, -1,  0,  0, -1, -1, -1, -1,  0,  0,  1,  0,  0,  1,  1,  1,  1,  0,  0],
+        [ 0,  0, -1,  0, -1,  1,  0,  0, -1, -1,  0,  1,  0,  1, -1,  0,  0,  1,  1],
+        [ 0,  0,  0, -1,  0,  0, -1,  1, -1,  1,  0,  0,  1,  0,  0,  1, -1,  1, -1],
+        [ 0,  0,  0,  0,  1, -1,  0,  0,  0,  0,  0,  0,  0,  1, -1,  0,  0,  0,  0],
+        [ 0,  0,  0,  0,  0,  0,  1, -1,  0,  0,  0,  0,  0,  0,  0,  1, -1,  0,  0],
+        [ 0,  0,  0,  0,  0,  0,  0,  0,  1, -1,  0,  0,  0,  0,  0,  0,  0,  1, -1],
+        [ 0,  1, -1,  0,  0,  0,  1,  1, -1, -1,  1, -1,  0,  0,  0,  1,  1, -1, -1],
+        [ 0,  1,  1, -2,  2,  2, -1, -1, -1, -1,  1,  1, -2,  2,  2, -1, -1, -1, -1],
+        [-2, -1, -1, -1,  0,  0,  0,  0,  0,  0, -1, -1, -1,  0,  0,  0,  0,  0,  0],
+        [ 0,  4,  0,  0,  1,  1,  1,  1,  0,  0, -4,  0,  0, -1, -1, -1, -1,  0,  0],
+        [ 0,  0,  4,  0,  1, -1,  0,  0,  1,  1,  0, -4,  0, -1,  1,  0,  0, -1, -1],
+        [ 0,  0,  0,  4,  0,  0,  1, -1,  1, -1,  0,  0, -4,  0,  0, -1,  1, -1,  1],
+        [ 0,  0,  0,  0, -1, -1,  1,  1,  0,  0,  0,  0,  0,  1,  1, -1, -1,  0,  0],
+        [ 0,  0,  0,  0, -1,  1,  0,  0,  1,  1,  0,  0,  0,  1, -1,  0,  0, -1, -1],
+        [ 0,  0,  0,  0,  0,  0, -1,  1,  1, -1,  0,  0,  0,  0,  0,  1, -1, -1,  1],
+        [ 0, -4,  2,  2,  1,  1,  1,  1, -2, -2, -4,  2,  2,  1,  1,  1,  1, -2, -2],
+        [ 0,  0, -2,  2,  1,  1, -1, -1,  0,  0,  0, -2,  2,  1,  1, -1, -1,  0,  0],
+        [ 4,  0,  0,  0, -1, -1, -1, -1, -1, -1,  0,  0,  0, -1, -1, -1, -1, -1, -1],
+        ])
+
+        self.inverse = torch.inverse(self.matrix.to(torch.float32))
+
+    def transform(self, f):
+        return self.mv(self.matrix, f)
+
+    def inverse_transform(self, m):
+        return self.mv(self.inverse, m)
 
 
 class D3Q27Hermite(Transform):

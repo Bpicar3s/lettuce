@@ -4,10 +4,15 @@ from .equilibrium_boundary_pu import EquilibriumBoundaryPU
 from .equilibrium_outlet_p import EquilibriumOutletP
 from .partially_saturated_boundary import PartiallySaturatedBC
 
+from .ReducedTGV_boundary import newsuperTGV3D
+from .wallfunction import WallFunction
 __all__ = [
     'AntiBounceBackOutlet',
     'BounceBackBoundary',
     'EquilibriumBoundaryPU',
+    'EquilibriumOutletP',
+    'newsuperTGV3D',
+    'WallFunction',
     'EquilibriumOutletP',
     'PartiallySaturatedBC'
 ]

@@ -2,7 +2,6 @@ import torch
 
 from . import Force
 from lettuce.util import append_axes
-
 __all__ = ['Guo']
 
 
@@ -39,5 +38,6 @@ class Guo(Force):
     def native_available(self) -> bool:
         return False
 
-    def native_generator(self) -> 'NativeForce':
-        pass
+
+    def native_generator(self):
+        return None

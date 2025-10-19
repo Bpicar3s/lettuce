@@ -123,7 +123,7 @@ Some variants are more useful than others. Including `full-revisionid` in a
 bug report should allow developers to reconstruct the exact code being tested
 (or indicate the presence of local changes that should be shared with the
 developers). `version` is suitable for display in an "about" box or a CLI
-`--version` output: it can be easily compared against release notes and lists
+`--version` output_h20_t30: it can be easily compared against release notes and lists
 of bugs fixed in various releases.
 
 The installer adds the following text to your `__init__.py` to place a basic
@@ -727,7 +727,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         mo = re.search(r'^(.+)-(\d+)-g([0-9a-f]+)$', git_describe)
         if not mo:
             # unparsable. Maybe git-describe is misbehaving?
-            pieces["error"] = ("unable to parse git-describe output: '%%s'"
+            pieces["error"] = ("unable to parse git-describe output_h20_t30: '%%s'"
                                %% describe_out)
             return pieces
 
@@ -1245,7 +1245,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         mo = re.search(r'^(.+)-(\d+)-g([0-9a-f]+)$', git_describe)
         if not mo:
             # unparsable. Maybe git-describe is misbehaving?
-            pieces["error"] = ("unable to parse git-describe output: '%s'"
+            pieces["error"] = ("unable to parse git-describe output_h20_t30: '%s'"
                                % describe_out)
             return pieces
 

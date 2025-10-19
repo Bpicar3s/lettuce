@@ -7,7 +7,7 @@ def test_equilibrium_outlet_p_algorithm(fix_stencil, fix_configuration):
     """
     Test for the equilibrium outlet p boundary algorithm. This test verifies
     that the algorithm correctly computes the
-    equilibrium outlet pressure by comparing its output to manually calculated
+    equilibrium outlet pressure by comparing its output_h20_t30 to manually calculated
     equilibrium values.
     """
     device, dtype, use_native = fix_configuration

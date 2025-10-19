@@ -312,7 +312,7 @@ def git_pieces_from_vcs(tag_prefix, root, verbose, runner=run_command):
         mo = re.search(r'^(.+)-(\d+)-g([0-9a-f]+)$', git_describe)
         if not mo:
             # unparsable. Maybe git-describe is misbehaving?
-            pieces["error"] = ("unable to parse git-describe output: '%s'"
+            pieces["error"] = ("unable to parse git-describe output_h20_t30: '%s'"
                                % describe_out)
             return pieces
 

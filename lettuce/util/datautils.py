@@ -46,7 +46,7 @@ class HDF5Reporter(Reporter):
         >>> simulation.reporters.append(hdf5_reporter)
         """
 
-    def __init__(self, flow, collision, interval, filebase='./output', metadata=None):
+    def __init__(self, flow, collision, interval, filebase='./output_h20_t30', metadata=None):
         self.context = flow.context
         self.interval = interval
         self.filebase = filebase
