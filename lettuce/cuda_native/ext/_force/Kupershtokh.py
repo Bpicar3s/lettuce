@@ -1,101 +1,73 @@
 __all__ = ['NativeExactDifferenceForce']
+from lettuce.cuda_native import DefaultCodeGeneration, Parameter
+from lettuce.cuda_native import DefaultCodeGeneration, Parameter
 
 class NativeExactDifferenceForce:
-    """
-    Generiert den nativen C++/CUDA Code für die Exact Difference Method.
-    Diese Klasse braucht keine Basisklasse, nur eine __init__- und eine generate-Methode.
-    """
-
     def __init__(self, python_force_instance):
-        """
-        Speichert eine Referenz auf die Python-Instanz, um an die Daten (Beschleunigung) zu kommen.
-        """
         self.python_force = python_force_instance
 
-    def generate(self, generator: 'Generator'):
-        """
-        Diese Methode wird von NativeBGKCollision aufgerufen.
-        Sie fügt den C++ Code für den Source Term in den Kernel ein.
-        """
-        # 1. Beschleunigungs-Tensor für den C++ Kernel verfügbar machen
+    def generate(self, reg: 'DefaultCodeGeneration'):
         accel_name = f"acceleration_{hex(id(self))[2:]}"
-        if not generator.launcher_hooked(accel_name):
-            # Übergibt den Python-Tensor an den C++ Launcher
-            generator.launcher_hook(
-                accel_name,
-                f"torch::Tensor {accel_name}",
-                accel_name,
-                # Pfad zum Tensor im Python-Simulations-Objekt
-                'simulation.collision.force.acceleration'
-            )
-            # Macht den Tensor im Kernel als "Accessor" verfügbar
-            generator.kernel_hook(
-                accel_name,
-                f"const auto {accel_name}",
-                f"{accel_name}.accessor<scalar_t, 1>()"
-            )
 
-        buffer = generator.append_pipeline_buffer
+        # einmalige "hook"-Sets (da reg.cuda_hooked/... nicht existieren)
+        if not hasattr(reg, "_cuda_hooked_names"):
+            reg._cuda_hooked_names = set()
+        if not hasattr(reg, "_kernel_hooked_names"):
+            reg._kernel_hooked_names = set()
 
-        # 2. C++ Code zur Berechnung des Source Terms generieren
+        def cuda_hook_once(symbol_name: str, expr: str, param: Parameter):
+            if symbol_name in reg._cuda_hooked_names:
+                return
+            reg.cuda_hook(expr, param)
+            reg._cuda_hooked_names.add(symbol_name)
 
-        # Lokale C++-Variablen im Kernel deklarieren
-        # Lokale C++-Variablen deklarieren (sichtbar im Kernel)
-        # Lokale C++-Variablen im Kernel deklarieren
-        buffer('scalar_t u_plus[d];')
-        buffer('scalar_t f_eq_plus[q];')
-        buffer('scalar_t source_term[q];')
+        def kernel_hook_once(symbol_name: str, expr: str, param: Parameter):
+            if symbol_name in reg._kernel_hooked_names:
+                return
+            reg.kernel_hook(expr, param)
+            reg._kernel_hooked_names.add(symbol_name)
+
+        # 1) Acceleration aus Python verfügbar machen
+        cuda_hook_once(accel_name,
+                       'simulation.collision.force.acceleration',
+                       Parameter('torch::Tensor', accel_name))
+        kernel_hook_once(accel_name,
+                         f'{accel_name}.accessor<scalar_t, 1>()',
+                         Parameter('const auto', accel_name))
+
+        buf = reg.pipe
+
+        # 2) Hilfsfelder
+        buf.append('scalar_t u_plus[d];')
+        buf.append('scalar_t u_save[d];')
+        buf.append('scalar_t source_term[q];')
 
         # u_plus = u + 0.5 * a
-        buffer('// Berechne u_plus = u + 0.5 * a')
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < d; ++i) {')
-        buffer(f'    u_plus[i] = u[i] + static_cast<scalar_t>(0.5) * {accel_name}[i];')
-        buffer('}')
+        buf.append('#pragma unroll')
+        buf.append('for (index_t i = 0; i < d; ++i) {')
+        buf.append(f'  u_plus[i] = u[i] + static_cast<scalar_t>(0.5) * {accel_name}[i];')
+        buf.append('}')
 
-        # --- NEU: f_eq(u) sichern, u -> u_plus setzen, f_eq(u_plus) generieren, alles zurücksetzen ---
+        # f_eq(u) pro Richtung (als Skalar) sichern
+        for q in range(reg.stencil.q):
+            f_eq_base_q = reg.equilibrium.f_eq(reg, q)   # Ausdruck für f_eq(u)
+            buf.append(f'scalar_t f_eq_base_{q} = {f_eq_base_q};')
 
-        # 1) f_eq(u) sichern
-        buffer('scalar_t f_eq_base[q];')
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < q; ++i) {')
-        buffer('    f_eq_base[i] = f_eq[i];')
-        buffer('}')
+        # u sichern und temporär u = u_plus setzen
+        buf.append('#pragma unroll')
+        buf.append('for (index_t i = 0; i < d; ++i) { u_save[i] = u[i]; u[i] = u_plus[i]; }')
 
-        # 2) u sichern und temporär mit u_plus überschreiben
-        buffer('scalar_t u_save[d];')
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < d; ++i) {')
-        buffer('    u_save[i] = u[i];')
-        buffer('    u[i] = u_plus[i];')
-        buffer('}')
+        # f_eq(u_plus) pro Richtung berechnen
+        for q in range(reg.stencil.q):
+            f_eq_plus_q = reg.equilibrium.f_eq(reg, q)  # Ausdruck für f_eq(u_plus), weil u==u_plus
+            buf.append(f'scalar_t f_eq_plus_{q} = {f_eq_plus_q};')
 
-        # 3) f_eq(u_plus) in den Standard-Namen f_eq schreiben lassen
-        buffer('// f_eq für (rho, u_plus) generieren (schreibt in f_eq)')
-        generator.equilibrium.generate_f_eq(generator)  # keine eigenen Namen -> nutzt u & f_eq
+        # u zurücksetzen
+        buf.append('#pragma unroll')
+        buf.append('for (index_t i = 0; i < d; ++i) { u[i] = u_save[i]; }')
 
-        # 4) f_eq(u_plus) nach f_eq_plus kopieren
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < q; ++i) {')
-        buffer('    f_eq_plus[i] = f_eq[i];')
-        buffer('}')
+        # Source-Term: S_i = f_eq(u_plus) - f_eq(u)
+        for q in range(reg.stencil.q):
+            buf.append(f'source_term[{q}] = f_eq_plus_{q} - f_eq_base_{q};')
 
-        # 5) u und f_eq(u) wiederherstellen
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < d; ++i) {')
-        buffer('    u[i] = u_save[i];')
-        buffer('}')
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < q; ++i) {')
-        buffer('    f_eq[i] = f_eq_base[i];')
-        buffer('}')
-
-        # 6) Source-Term S_i = f_eq(u_plus) - f_eq(u)
-        buffer('// Source-Term S_i = f_eq_plus[i] - f_eq[i]')
-        buffer('#pragma unroll')
-        buffer('for (index_t i = 0; i < q; ++i) {')
-        buffer('    source_term[i] = f_eq_plus[i] - f_eq[i];')
-        buffer('}')
-
-        # Ergebnis-Arrayname zurückgeben
         return "source_term"

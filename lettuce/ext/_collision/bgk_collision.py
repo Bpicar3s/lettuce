@@ -41,8 +41,9 @@ class BGKCollision(Collision):
     def native_available(self) -> bool:
         return self.force is None or self.force.native_available()
 
-    def native_generator(self, index: int) -> 'NativeCollision':
+    def native_generator(self, index: int):
         if self.force is not None:
-            return NativeBGKCollision(index, self.force.native_generator())  # ✅
+            return NativeBGKCollision(index, self.force.native_generator())
         return NativeBGKCollision(index)
+
 

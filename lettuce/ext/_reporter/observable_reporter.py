@@ -249,32 +249,28 @@ class AdaptiveAcceleration(Observable):
     @torch.no_grad()
     def compute_acceleration(self):
         """
-        Neue a(t) berechnen:
-        - utau aus top/bottom
-        - globalen <u_x>
-        - einfacher P-Regler auf Zielgeschwindigkeit
+        Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        # utau unten/oben (achte auf is_top)
         utau_b, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
         utau_t, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
         utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
-        # globaler Mittelwert ux
-        u_field = self.flow.u()           # (3, Nx, Ny, Nz)
-        ux_mean = torch.mean(u_field[0])  # Skalar (LU)
+        u_field = self.flow.u()
+        ux_mean = torch.mean(u_field[0])
 
-        # Basis-Gradient + P-Korrektur auf Ziel <ux>
-        H = max(float(self.flow.h), 1.0)  # Schutz gegen 0
+        H = max(float(self.flow.h), 1.0)
         Fx_base = (utau_mean ** 2) / H
-        Fx_reg  = self.k_gain * (self.target_mean_ux_lu - ux_mean) * (self.target_mean_ux_lu / H)
+        Fx_reg = self.k_gain * (self.target_mean_ux_lu - ux_mean) * (self.target_mean_ux_lu / H)
         Fx = (Fx_base + Fx_reg).to(device=self.context.device, dtype=self.flow.f.dtype)
 
-        # nur x-Komponente aktiv
+        # neue Beschleunigung (nur x-Komponente)
         acc = torch.stack([Fx] + [torch.zeros_like(Fx)] * (self.flow.stencil.d - 1))
+
         self.current_accel = acc
 
-        # 💡 direkte Verbindung: ExactDifferenceForce bekommt neue a(t)
-        self.force.acceleration = acc
+        # 🔹 Nur den Inhalt kopieren, nicht den Tensor ersetzen!
+        self.force.acceleration.copy_(acc)
+
         return acc
 
     def __call__(self, f=None):
