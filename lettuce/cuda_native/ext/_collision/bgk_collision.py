@@ -1,112 +1,139 @@
 from typing import Optional
-
 from lettuce.cuda_native import DefaultCodeGeneration, Parameter
 from ... import NativeCollision
+import torch
 
-__all__ = ['NativeBGKCollision']
+__all__ = ["NativeBGKCollision"]
 
 
+# =====================================================================
+# ✅ DummyForce (Fallback, falls keine Force übergeben wird)
+# =====================================================================
+class DummyForce:
+    """
+    Platzhalter-Force, falls keine echte Kraft übergeben wurde.
+    Sie stellt sicher, dass simulation.collision.force.acceleration
+    immer existiert, damit der Native-Kernel nicht crasht.
+    """
+    def __init__(self, flow):
+        self.flow = flow
+        self.acceleration = flow.context.convert_to_tensor(
+            [0.0] * flow.stencil.d,
+            dtype=flow.f.dtype,
+            device=flow.f.device,
+        )
+
+    def native_available(self):
+        return True
+
+    def native_generator(self):
+        # Kein eigener Native-Code, wird nur als Datenhalter verwendet
+        return None
+
+
+# =====================================================================
+# ✅ NativeBGKCollision mit optionalem Forcing (Kupershtokh-kompatibel)
+# =====================================================================
 class NativeBGKCollision(NativeCollision):
-
-    def __init__(self, index: int, force: Optional['NativeForce'] = None):
+    def __init__(self, index: int, flow=None, force: Optional["Force"] = None):
         super().__init__(index)
-        self.force = force
+        self.flow = flow
+        # Falls keine Force existiert → DummyForce verwenden
+        self.force = force if force is not None else DummyForce(flow)
 
     @staticmethod
-    def create(index: int, force: Optional['NativeForce'] = None):
+    def create(index: int, flow=None, force: Optional["Force"] = None):
+        # Immer ein gültiges Objekt erzeugen
         if force is None:
-            return None
-        return NativeBGKCollision(index, force)
+            force = DummyForce(flow)
+        return NativeBGKCollision(index, flow, force)
 
-    def cuda_tau_inv(self, reg: 'DefaultCodeGeneration'):
+    # -----------------------------------------------------------------
+    # Hook für τ⁻¹
+    # -----------------------------------------------------------------
+    def cuda_tau_inv(self, reg: "DefaultCodeGeneration"):
         variable = f"tau_inv{hex(id(self))[2:]}"
-        # erzeugt im Launcher (Host) eine double-Variable und liefert deren Namen zurück
-        return reg.cuda_hook('1.0 / simulation.collision.tau', Parameter('double', variable))
+        return reg.cuda_hook(
+            "1.0 / simulation.collision.tau", Parameter("double", variable)
+        )
 
-    def kernel_tau_inv(self, reg: 'DefaultCodeGeneration'):
+    def kernel_tau_inv(self, reg: "DefaultCodeGeneration"):
         variable = self.cuda_tau_inv(reg)
-        # mapped dieselbe Variable als scalar_t in den Kernel
-        return reg.kernel_hook(f"static_cast<scalar_t>({variable})", Parameter('scalar_t', variable))
+        return reg.kernel_hook(
+            f"static_cast<scalar_t>({variable})", Parameter("scalar_t", variable)
+        )
 
-    def generate(self, reg: 'DefaultCodeGeneration'):
-        # tau^{-1}
+    # -----------------------------------------------------------------
+    # Haupt-Codegenerator
+    # -----------------------------------------------------------------
+    def generate(self, reg: "DefaultCodeGeneration"):
         tau_inv = self.kernel_tau_inv(reg)
 
-        # --- acceleration aus Python hooken ---
+        # Hooke rho & u aus Lettuce-Makros (immer verfügbar)
+        rho = reg.kernel_rho()
+        u = [reg.kernel_u(d) for d in range(reg.stencil.d)]
+
+        # -------------------------------
+        # (1) Kein Forcing → klassisches BGK
+        # -------------------------------
+        if isinstance(self.force, DummyForce):
+            for q in range(reg.stencil.q):
+                f_q = reg.f_reg(q)
+                f_eq_q = reg.equilibrium.f_eq(reg, q)
+                reg.pipe.append(f"{f_q} = {f_q} - ({tau_inv} * ({f_q} - {f_eq_q}));")
+            return
+
+        # -------------------------------
+        # (2) Forcing aktiv → Kupershtokh-Quelle hinzufügen
+        # -------------------------------
         accel_name = f"acceleration_{hex(id(self))[2:]}"
-        if not hasattr(reg, "_cuda_hooked_names"):
-            reg._cuda_hooked_names = set()
-        if not hasattr(reg, "_kernel_hooked_names"):
-            reg._kernel_hooked_names = set()
+        reg.cuda_hook(
+            "simulation.collision.force.acceleration",
+            Parameter("torch::Tensor", accel_name),
+        )
+        reg.kernel_hook(
+            f"{accel_name}.accessor<scalar_t, 1>()",
+            Parameter("const auto", accel_name),
+        )
 
-        from lettuce.cuda_native import Parameter
+        # Konstanten aus dem Stencil
+        e = reg.stencil.e
+        w = reg.stencil.w
+        cs2 = reg.stencil.cs**2
 
-        def cuda_hook_once(sym, expr, param):
-            if sym in reg._cuda_hooked_names: return
-            reg.cuda_hook(expr, param)
-            reg._cuda_hooked_names.add(sym)
+        # Kupershtokh: f_eq(u + 0.5a) - f_eq(u)
+        for q in range(reg.stencil.q):
+            f_q = reg.f_reg(q)
+            f_eq_q = reg.equilibrium.f_eq(reg, q)
 
-        def kernel_hook_once(sym, expr, param):
-            if sym in reg._kernel_hooked_names: return
-            reg.kernel_hook(expr, param)
-            reg._kernel_hooked_names.add(sym)
+            ex, ey, ez = (
+                float(e[q][0]),
+                float(e[q][1]) if reg.stencil.d > 1 else 0.0,
+                float(e[q][2]) if reg.stencil.d > 2 else 0.0,
+            )
+            wq = float(w[q])
 
-        cuda_hook_once(accel_name,
-                       'simulation.collision.force.acceleration',
-                       Parameter('torch::Tensor', accel_name))
-        kernel_hook_once(accel_name,
-                         f'{accel_name}.accessor<scalar_t, 1>()',
-                         Parameter('const auto', accel_name))
+            # u_plus = u + 0.5a
+            ux_p = f"({u[0]} + static_cast<scalar_t>(0.5)*{accel_name}[0])"
+            uy_p = f"({u[1]} + static_cast<scalar_t>(0.5)*{accel_name}[1])"
+            uz_p = f"({u[2]} + static_cast<scalar_t>(0.5)*{accel_name}[2])"
 
-        # ---------- rho(u) & u aus f_q und e_{qk} aufbauen (ohne reg.macro) ----------
-        e = reg.stencil.e  # numpy-like: shape [q, d]
-        w = reg.stencil.w  # [q]
-        cs2 = reg.stencil.cs ** 2  # scalar
-        qn = reg.stencil.q
-        dn = reg.stencil.d
+            eu_p = f"(({ex})*{ux_p} + ({ey})*{uy_p} + ({ez})*{uz_p})"
+            u2_p = f"({ux_p}*{ux_p} + {uy_p}*{uy_p} + {uz_p}*{uz_p})"
 
-        # rho = sum_q f_q
-        rho_terms = [f"{reg.f_reg(q)}" for q in range(qn)]
-        rho = "(" + " + ".join(rho_terms) + ")"
-
-        # momentum_k = sum_q e[q,k] * f_q
-        def mom_comp(k: int) -> str:
-            terms = []
-            for qi in range(qn):
-                coef = float(e[qi][k]) if k < dn else 0.0
-                if coef == 0.0:
-                    continue
-                terms.append(f"({coef})*({reg.f_reg(qi)})")
-            return "(0)" if not terms else "(" + " + ".join(terms) + ")"
-
-        # u_k = momentum_k / rho
-        ux = f"({mom_comp(0)})/({rho})"
-        uy = "static_cast<scalar_t>(0)" if dn < 2 else f"({mom_comp(1)})/({rho})"
-        uz = "static_cast<scalar_t>(0)" if dn < 3 else f"({mom_comp(2)})/({rho})"
-
-        # u_plus = u + 0.5 * a   (GENAU wie in deiner Python-EDM, KEIN /rho!)
-        ux_p = f"(({ux}) + static_cast<scalar_t>(0.5) * {accel_name}[0])"
-        uy_p = "static_cast<scalar_t>(0)" if dn < 2 else f"(({uy}) + static_cast<scalar_t>(0.5) * {accel_name}[1])"
-        uz_p = "static_cast<scalar_t>(0)" if dn < 3 else f"(({uz}) + static_cast<scalar_t>(0.5) * {accel_name}[2])"
-
-        # Helper: f_eq-Ausdrücke (rein aus Literalen/Ausdrücken, kein 'u[]' im Scope)
-        def f_eq_expr(q: int, ux_s: str, uy_s: str, uz_s: str) -> str:
-            ex = float(e[q][0])
-            ey = float(e[q][1]) if dn > 1 else 0.0
-            ez = float(e[q][2]) if dn > 2 else 0.0
-            eu = f"(({ex})*({ux_s}) + ({ey})*({uy_s}) + ({ez})*({uz_s}))"
-            u2 = f"(({ux_s})*({ux_s}) + ({uy_s})*({uy_s}) + ({uz_s})*({uz_s}))"
-            return (
-                f"static_cast<scalar_t>({w[q]})*({rho})*("
-                f"1 + ({eu})/({cs2}) + static_cast<scalar_t>(0.5)*(({eu})*({eu}))/(({cs2})*({cs2}))"
-                f" - static_cast<scalar_t>(0.5)*({u2})/({cs2}))"
+            # f_eq(u+0.5a)
+            f_eq_plus = (
+                f"(static_cast<scalar_t>({wq})*{rho}*("
+                f"1 + ({eu_p})/({cs2}) "
+                f"+ static_cast<scalar_t>(0.5)*(({eu_p})*({eu_p}))/(({cs2})*({cs2})) "
+                f"- static_cast<scalar_t>(0.5)*({u2_p})/({cs2})"
+                f"))"
             )
 
-        # ---------- BGK + harter EDM-Source je Richtung ----------
-        for q in range(qn):
-            f_q = reg.f_reg(q)
-            f_eq_q = reg.equilibrium.f_eq(reg, q)  # f_eq(rho, u) (bestehende API)
-            f_eq_p = f_eq_expr(q, ux_p, uy_p, uz_p)  # f_eq(rho, u + 0.5 a)
-            s_q = f"(({f_eq_p}) - ({f_eq_q}))"  # Kupershtokh-Quelle
+            # Quelle: S_i = f_eq(u+0.5a) - f_eq(u)
+            s_q = f"(({f_eq_plus}) - ({f_eq_q}))"
 
-            reg.pipe.append(f"{f_q} = {f_q} - ({tau_inv} * ({f_q} - {f_eq_q})) + {s_q};")
+            # Voller BGK-Schritt mit Quelle
+            reg.pipe.append(
+                f"{f_q} = {f_q} - ({tau_inv} * ({f_q} - {f_eq_q})) + {s_q};"
+            )
