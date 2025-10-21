@@ -67,4 +67,4 @@ class ExactDifferenceForce(Force):
     def native_generator(self):
         """Gibt eine Instanz des C++ Code-Generators zurück."""
         # Erstellt und gibt eine Instanz der Klasse aus Schritt 1 zurück
-        return None  #NativeExactDifferenceForce(self)
+        return self  #NativeExactDifferenceForce(self)
