@@ -19,7 +19,7 @@ simulation = lt.Simulation(flow, collision, [])
 nx, ny, nz = flow.resolution  # z. B. [64, 64, 64]
 
 # Beispiel 1: zufällige Testmaske (20 % True)
-simulation.no_collision_mask = torch.rand((nx, ny, nz), device=flow.context.device) > 0.8
+simulation.no_collision_mask = torch.ones((nx, ny, nz), device=flow.context.device)
 
 # reporters will grab the results in between simulation steps
 # (see io.py and simulation.py)
