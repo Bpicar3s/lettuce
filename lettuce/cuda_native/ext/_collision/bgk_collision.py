@@ -130,3 +130,4 @@ class NativeBGKCollision(NativeCollision):
         for q in range(reg.stencil.q):
             f_q = reg.f_reg(q)
             reg.pipe.append(f"{f_q} = {f_q} - ({tau_inv} * ({f_q} - {feq_shift[q]})) + {si[q]};")
+
