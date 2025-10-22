@@ -8,6 +8,82 @@ from lettuce.ext._boundary.bounce_back_boundary import BounceBackBoundary
 
 from lettuce.ext._flows import ExtFlow
 
+
+import lettuce as lt
+from lettuce import Boundary
+from lettuce.cuda_native import NativeBoundary, DefaultCodeGeneration
+
+
+# --- ANFANG: Code-Block zum Einfügen ---
+
+class NativeDummyBoundary(NativeBoundary):
+    """
+    Eine leere Cuda-Boundary, die nichts tut.
+    Sie existiert nur, um den Generator in den "Mask-Mode" zu zwingen.
+    """
+
+    def generate(self, reg: 'DefaultCodeCodeGeneration'):
+        # Fügt einen C++-Kommentar hinzu, damit wir wissen, dass es funktioniert hat
+        reg.pipe.append(f"// NativeDummyBoundary (Index {self.index}) - Aktiv.")
+
+    @staticmethod
+    def create(index: int):
+        return NativeDummyBoundary(index)
+
+
+class DummyBoundary(Boundary):
+    """
+    Die Python-Seite der Dummy-Boundary.
+    Sie existiert nur, um flow.pre_boundaries zu füllen.
+    """
+
+    def __call__(self, flow):
+        return flow.f  # Tut nichts
+
+    def native_available(self) -> bool:
+        return True  # Sagt "Ich habe eine Cuda-Version!"
+
+    def native_generator(self, index: int) -> 'NativeBoundary':
+        return NativeDummyBoundary.create(index)  # Gibt die Cuda-Klasse zurück
+
+    # WICHTIG: Diese Funktion muss auch da sein
+    def make_no_collision_mask(self, shape, context):
+        """
+        ERZEUGT DIE BOOLEAN MASKE FÜR DEINEN "TRICK"
+        Gibt eine *boolesche* Maske zurück, die True ist,
+        wo der Cuda-Kernel NICHT kollidieren soll.
+        Simulation.__init__ wandelt das in die uint8 Index-Maske um.
+        """
+        print(">>> DummyBoundary.make_no_collision_mask() wird aufgerufen.")
+        mask = torch.zeros(shape, dtype=torch.bool, device=context.device)
+
+        # Dein "Trick": y=0,1 und y=-1,-2 überspringen
+        mask[:, 0, :] = True
+        mask[:, 1, :] = True
+        mask[:, -1, :] = True
+        mask[:, -2, :] = True
+
+        return mask
+
+    def make_no_streaming_mask(self, shape, context):
+        """
+        ERZEUGT DEN DUMMY-TENSOR FÜR NO-STREAMING
+        Gibt einen uint8 Tensor zurück, der mit 0 gefüllt ist
+        ("überall streamen"). Wird benötigt, weil der Cuda-Kernel
+        im Mask-Mode diesen Tensor erwartet.
+        """
+        print(">>> DummyBoundary.make_no_streaming_mask() wird aufgerufen.")
+        # Shape ist [q, *resolution]
+        q = shape[0]  # Erster Dimension von f ist q
+        resolution = shape[1:]
+
+        # Erzeuge den Null-Tensor direkt hier
+        dummy_mask = torch.zeros([q, *resolution], dtype=torch.bool, device = context.device)
+        print("      Dummy 'no_streaming_mask' (uint8 Tensor) erstellt.")
+        return dummy_mask
+# --- ENDE: Code-Block zum Einfügen ---
+
+
 class ChannelFlow3D(ExtFlow):
     def __init__(self, context: Context,
                  resolution: Union[int, List[int]],
@@ -172,5 +248,6 @@ class ChannelFlow3D(ExtFlow):
             wfb_top = BounceBackBoundary(mask=self.mask_bottom)
             boundary = [wfb_bottom, wfb_top]
         elif self.bbtype is None:
-            boundary = []
+            boundary = [DummyBoundary()]
         return boundary
+
