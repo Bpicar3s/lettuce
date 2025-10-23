@@ -26,7 +26,7 @@ parser.add_argument("--Mach", type=float, default=0.1)
 parser.add_argument("--h", type=int, default=12, help="Halbe Kanalhöhe in LU")
 parser.add_argument("--bbtype", type=str, default="wallfunction", choices=["halfway", "fullway", "wallfunction", "freeslip"],
                     help="Typ der Bounce-Back-Randbedingung")
-parser.add_argument("--use_native", type=bool, default=True)
+parser.add_argument("--use_native", type=bool, default=False)
 args, unknown = parser.parse_known_args()
 args = vars(args)
 
