@@ -125,7 +125,14 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     yplus = dy * utau / viscosity
 
     re_tau = (ny / 2) * utau / viscosity
-    return utau, yplus, re_tau, re_tau.mean(), re_tau.mean()
+    rho = flow.rho()
+    rho_wall = rho[0, mask]
+
+    tau_w = rho_wall * (utau ** 2)
+    u_tau_ref = torch.sqrt(tau_w.mean() / rho_wall.mean())
+    re_tau_ref = (ny / 2) * u_tau_ref / viscosity
+
+    return utau, yplus, re_tau, u_tau_ref, re_tau_ref
 
 
 
