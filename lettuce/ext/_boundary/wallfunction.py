@@ -96,7 +96,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
     u = flow.u()
     viscosity = flow.units.viscosity_lu
-    ny = u.shape[2]
+    ny = flow.resolution[1]
 
 
     if method == "Spalding":
@@ -125,7 +125,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
     yplus = dy * utau / viscosity
 
     re_tau = (ny / 2) * utau / viscosity
-    return utau, yplus, re_tau
+    return utau, yplus, re_tau, re_tau.mean(), re_tau.mean()
 
 
 
@@ -146,8 +146,8 @@ class WallFunction(Boundary):
 
         self.tau_x = None
         self.tau_z = None
-        
-        
+
+
         self.u_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
         self.y_plus_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
         self.Re_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
@@ -186,7 +186,7 @@ class WallFunction(Boundary):
 
         y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
-        u_tau, yplus, re_tau = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
+        u_tau, yplus, re_tau, _, _ = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
 
         tau_w = rho[:,mask_fluidcell] * u_tau**2
 
@@ -241,7 +241,7 @@ class WallFunction(Boundary):
 
 
     def make_no_collision_mask(self, f_shape, context):
-        return self.mask
+        return self.mask.to(torch.bool)
 
     def make_no_streaming_mask(self, f_shape, context):
         return None

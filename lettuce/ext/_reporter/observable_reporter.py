@@ -199,22 +199,57 @@ class ObservableReporter(Reporter):
 
 
 class WallQuantities(Observable):
-    def __init__(self, mask, wall, flow, context = None):
+    def __init__(self, mask, wall, flow, context=None):
         self.wall = wall
         self.mask = mask
         self.flow = flow
         self.context = context
-        # Ensure the boundary object has the expected attributes, initialized to tensors
-        # (This is already handled by your WallFunctionBoundaryTest __init__)
 
     def __call__(self, f: Optional[torch.Tensor] = None):
+        # --- 1. Wandgrößen ---
+        u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref = compute_wall_quantities(
+            flow=self.flow,
+            dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
+            is_top=True if self.wall == "top" else False
+        )
 
-        u_tau, y_plus, re_tau = compute_wall_quantities(flow = self.flow, dy=torch.tensor(1, device=self.flow.f.device, dtype=self.flow.f.dtype), is_top=True if self.wall == "top" else False)
-        print("y+:", y_plus.mean(),"Re_tau:", re_tau.mean())
-        return torch.stack([
-            u_tau.mean(),
-            y_plus.mean(),
-            re_tau.mean(),
+        # --- 2. Mittleres Profil U(y) ---
+        viscosity = self.flow.units.viscosity_lu
+
+        u = self.flow.u()
+
+        ny = self.flow.resolution[1]
+        mid = ny // 2
+
+        # Mittel über x,z
+        U_mean_y = torch.mean(torch.mean(u[0], dim=0), dim=-1)
+
+        # Nur halbes Profil (bis Mitte)
+        U_mean_y = U_mean_y[:mid]
+        y = torch.arange(mid, device=self.flow.f.device, dtype=self.flow.f.dtype)
+
+        # Plus-Skalierung
+        y_plus_profile = y * u_tau_ref / viscosity
+        U_plus_profile = U_mean_y / u_tau_ref
+
+        # --- 3. Logging ---
+        print(
+            f"[{self.wall}] y+_mean={y_plus.mean():.2f}, "
+            f"Re_tau_mean={re_tau.mean():.2f}"
+        )
+
+        # --- 4. Stack: alles zu einem langen 1D-Tensor zusammenfügen ---
+        # Reihenfolge: [Mittelwerte] + [Profilwerte hintereinander]
+        return torch.cat([
+            torch.stack([
+                u_tau.mean(),
+                y_plus.mean(),
+                re_tau.mean(),
+                u_tau_ref,
+                re_tau_ref
+            ]),
+            y_plus_profile.flatten(),
+            U_plus_profile.flatten()
         ])
 
 class GlobalMeanUXReporter(Observable):
@@ -251,8 +286,8 @@ class AdaptiveAcceleration(Observable):
         """
         Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        utau_b, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
-        utau_t, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
+        utau_b, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
+        utau_t, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
         utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()

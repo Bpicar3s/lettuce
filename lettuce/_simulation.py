@@ -92,10 +92,14 @@ class Simulation:
                 if nsm is not None:
                     self.no_streaming_mask |= nsm
 
+
             for i, boundary in enumerate(self.post_boundaries,start=self.collision_index+1):
                 ncm = boundary.make_no_collision_mask(
                     [it for it in self.flow.f.shape[1:]], context=self.context)
                 if ncm is not None:
+                    print("Mask dtype:", ncm.dtype)
+                    print("Boundary type:", type(boundary))
+
                     self.no_collision_mask[ncm] = i
                 nsm = boundary.make_no_streaming_mask(
                     [it for it in self.flow.f.shape], context=self.context)
