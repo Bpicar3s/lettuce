@@ -72,7 +72,7 @@ def solve_u_tau_exact(y, u, nu,
 
         return utau
 
-def compute_wall_quantities(flow, dy, is_top: bool):
+def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0):
     """
     Berechnet Wandgrößen wie u_tau, y+, Re_tau für eine Wand.
 
@@ -103,7 +103,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
         utau = solve_u_tau_exact(
             y=dy,
-            u=torch.sqrt(u[0,mask]**2+u[2,mask]**2),
+            u=torch.sqrt((u[0,mask]+acceleration)**2+u[2,mask]**2),
             nu=viscosity,
         )
 
@@ -139,7 +139,7 @@ def compute_wall_quantities(flow, dy, is_top: bool):
 
 
 class WallFunction(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8):
+    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8, force=None):
         self.context = context
 
         self.mask = self.context.convert_to_tensor(mask)
@@ -150,6 +150,7 @@ class WallFunction(Boundary):
         self.B = B
         self.max_iter = max_iter
         self.tol = tol
+        self.force=force
 
         self.tau_x = None
         self.tau_z = None
@@ -186,14 +187,21 @@ class WallFunction(Boundary):
 
         rho = flow.rho()
         u = flow.u()
+        if self.force is None:
+            u_x = u[0][mask_fluidcell]
+            acceleration = 0
+        else:
+            u_x = u[0][mask_fluidcell]+ self.force.acceleration[0]
+            acceleration = self.force.acceleration[0]
 
-        u_x = u[0][mask_fluidcell]
+
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
         y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
-        u_tau, yplus, re_tau, _, _ = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
+        u_tau, yplus, re_tau, _, _ = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False,
+                                                acceleration = acceleration)
 
         tau_w = rho[:,mask_fluidcell] * u_tau**2
 
