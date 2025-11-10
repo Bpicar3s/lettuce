@@ -11,44 +11,39 @@ import torch
 
 
 def solve_u_tau_exact(y, u, nu,
-                                max_iter=10, tol=1e-7,
-                                KAPPA=0.4187, B=5.5, damping=1.0, eps=1e-14):
-        """
-        Löst für einen festen Wandabstand y (Skalar) und einen Vektor u (LU)
-        elementweise parallel auf der GPU:
+                      max_iter=10, tol=1e-7,
+                      KAPPA=0.4187, B=5.5,
+                      damping=1.0, utau_prev=None, newton_speedup = False):
+    device = u.device
+    dtype = u.dtype
+    eps = torch.finfo(dtype).eps
 
-            y+ = u+ + A [exp(k u+) - 1 - k u+ - (k u+)^2/2 - (k u+)^3/6]
-            u+ = u / u_tau,   y+ = y * u_tau / nu,   A = exp(-KAPPA*B)
+    y = torch.as_tensor(y, device=device, dtype=dtype)
+    u = torch.as_tensor(u, device=device, dtype=dtype)
+    nu = torch.as_tensor(nu, device=device, dtype=dtype)
 
-        Rückgabe:
-            u_tau_vec  (shape wie u)
-            iter_vec   (int, benötigte Schritte je Element)
-        """
-        device = u.device
-        dtype = u.dtype
+    A = torch.exp(torch.as_tensor(-KAPPA * B, device=device, dtype=dtype))
 
-        y = torch.as_tensor(y, device=device, dtype=dtype).clamp_min(eps)
-        u = torch.as_tensor(u, device=device, dtype=dtype).clamp_min(eps)
-        nu = torch.as_tensor(nu, device=device, dtype=dtype).clamp_min(eps)
-
-        A = torch.exp(torch.as_tensor(-KAPPA * B, device=device, dtype=dtype))
-
-        # Startwert: viskose Näherung + Log-Kick für große y+
+    # --- Startwertwahl ---
+    if utau_prev is not None and newton_speedup:
+        utau = utau_prev.clone()
+    else:
         utau = torch.sqrt((u * nu / y).clamp_min(eps))
         yplus0 = y * utau / nu
         mask_log = yplus0 >= 11.81
         if mask_log.any():
-            denom = (1.0 / KAPPA) * torch.log((y * utau / nu).clamp_min(eps)) + B
-            utau = torch.where(mask_log, (u / denom.clamp_min(1e-8)).clamp_min(eps), utau)
+            utau = torch.where(mask_log,
+                               (u * nu ** (1 / 7) / y ** (1 / 7) / 8.3) ** (7 / 8),
+                               utau)
 
-        iters = torch.zeros_like(utau, dtype=torch.int32)
-        active = torch.ones_like(utau, dtype=torch.bool)
+    iters = torch.zeros_like(utau, dtype=torch.int32)
+    active = torch.ones_like(utau, dtype=torch.bool)
 
-        for _ in range(max_iter):
+    for _ in range(max_iter):
             if not active.any():
                 break
 
-            u_plus = u / utau.clamp_min(eps)
+            u_plus = u / utau
             ku = KAPPA * u_plus
             exp_ku = torch.exp(ku.clamp(-50, 50))
 
@@ -57,12 +52,11 @@ def solve_u_tau_exact(y, u, nu,
             F = lhs - rhs
 
             drhs_duplus = 1.0 + A * (KAPPA * exp_ku - KAPPA - (KAPPA ** 2) * u_plus - 0.5 * (KAPPA ** 3) * u_plus ** 2)
-            duplus_dutau = -u / utau.clamp_min(eps).pow(2)
+            duplus_dutau = -u / utau.pow(2)
             dF = (y / nu) - drhs_duplus * duplus_dutau
-            dF = torch.where(dF.abs() < 1e-14, dF.sign() * 1e-14 + (dF == 0) * 1e-14, dF)
 
             delta = F / dF
-            utau_new = (utau - damping * delta).clamp_min(eps)
+            utau_new = (utau - damping * delta)
 
             utau = torch.where(active, utau_new, utau)
             conv = delta.abs() < tol
@@ -70,9 +64,12 @@ def solve_u_tau_exact(y, u, nu,
             active = active & (~conv)
             iters = iters + just.to(iters.dtype) + active.to(iters.dtype)
 
-        return utau
+    mean_iters = iters.float().mean()
+    max_iters = iters.max()
 
-def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0):
+    return utau, mean_iters, max_iters
+
+def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_speedup = False, utau_prev = None):
     """
     Berechnet Wandgrößen wie u_tau, y+, Re_tau für eine Wand.
 
@@ -101,10 +98,12 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0):
 
     if method == "Spalding":
 
-        utau = solve_u_tau_exact(
+        utau, mean_it, max_it = solve_u_tau_exact(
             y=dy,
             u=torch.sqrt((u[0,mask]+acceleration)**2+u[2,mask]**2),
             nu=viscosity,
+            newton_speedup = newton_speedup,
+            utau_prev = utau_prev,
         )
 
     elif method == "Log-Visc":
@@ -132,14 +131,14 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0):
     u_tau_ref = torch.sqrt(tau_w.mean() / rho_wall.mean())
     re_tau_ref = (ny / 2) * u_tau_ref / viscosity
 
-    return utau, yplus, re_tau, u_tau_ref, re_tau_ref
+    return utau, yplus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it
 
 
 
 
 
 class WallFunction(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8, force=None):
+    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8, force=None, newton_speedup = False):
         self.context = context
 
         self.mask = self.context.convert_to_tensor(mask)
@@ -151,11 +150,12 @@ class WallFunction(Boundary):
         self.max_iter = max_iter
         self.tol = tol
         self.force=force
-
+        self.utau_start = None
         self.tau_x = None
         self.tau_z = None
-
-
+        self.newton_speedup = newton_speedup
+        self.mean_it=None
+        self.max_it=None
         self.u_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
         self.y_plus_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
         self.Re_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
@@ -200,9 +200,13 @@ class WallFunction(Boundary):
 
         y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
-        u_tau, yplus, re_tau, _, _ = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False,
-                                                acceleration = acceleration)
-
+        u_tau, yplus, re_tau, _, _, self.mean_it, self.max_it = compute_wall_quantities(flow, y,
+                                                                   is_top=True if self.wall == "top" else False,
+                                                                   acceleration = acceleration,
+                                                                   newton_speedup = self.newton_speedup,
+                                                                   utau_prev=self.utau_start
+                                                                   )
+        self.utau_start = u_tau
         tau_w = rho[:,mask_fluidcell] * u_tau**2
 
         if torch.isnan(tau_w).any() or torch.isinf(tau_w).any():

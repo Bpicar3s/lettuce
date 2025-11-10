@@ -199,19 +199,30 @@ class ObservableReporter(Reporter):
 
 
 class WallQuantities(Observable):
-    def __init__(self, mask, wall, flow, context=None):
+    def __init__(self, mask, wall, flow,newton_speedup, context=None):
         self.wall = wall
         self.mask = mask
         self.flow = flow
         self.context = context
+        self.newton_speedup = newton_speedup
+        self.utau_prev = None
 
     def __call__(self, f: Optional[torch.Tensor] = None):
         # --- 1. Wandgrößen ---
-        u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref = compute_wall_quantities(
+        u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
             flow=self.flow,
             dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
             is_top=True if self.wall == "top" else False
         )
+        if self.newton_speedup:
+            u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
+                flow=self.flow,
+                dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
+                is_top=True if self.wall == "top" else False,
+                newton_speedup=self.newton_speedup,
+                utau_prev=self.utau_prev
+            )
+        self.utau_prev = u_tau
 
         # --- 2. Mittleres Profil U(y) ---
         viscosity = self.flow.units.viscosity_lu
@@ -246,10 +257,12 @@ class WallQuantities(Observable):
                 y_plus.mean(),
                 re_tau.mean(),
                 u_tau_ref,
-                re_tau_ref
+                re_tau_ref,
+                mean_it,
+                max_it
             ]),
             y_plus_profile.flatten(),
-            U_plus_profile.flatten()
+            U_plus_profile.flatten(),
         ])
 
 class GlobalMeanUXReporter(Observable):
@@ -286,8 +299,8 @@ class AdaptiveAcceleration(Observable):
         """
         Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        utau_b, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
-        utau_t, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
+        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
+        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
         utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()
@@ -346,9 +359,8 @@ class WallfunctionReporter(Observable):
         #torch.where(torch.eq(self.wfb_bottom.mask, 0),
         #            self.wfb_bottom(self.flow), self.flow.f, out=self.flow.f)
 
+        mean_it = (self.wfb_bottom.mean_it+self.wfb_top.mean_it)*0.5
+        max_it = (self.wfb_bottom.max_it+self.wfb_top.max_it)*0.5
 
         # (3) Optional Logging
-        return torch.tensor([
-            float(self.wfb_bottom.u_tau_mean),
-            float(self.wfb_top.u_tau_mean)
-        ], device=self.flow.f.device)
+        return mean_it, max_it
