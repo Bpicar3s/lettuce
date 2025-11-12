@@ -1,60 +1,35 @@
 #!/usr/bin/env python3
-import os
-import argparse
-import torch, numpy as np, matplotlib.pyplot as plt
+import os, torch, numpy as np, matplotlib.pyplot as plt
 import lettuce as lt
 from lettuce import D3Q19
 from lettuce.ext._boundary.wallfunction import WallFunction
 from lettuce.ext._reporter.observable_reporter import (
-    GlobalMeanUXReporter, WallQuantities, WallfunctionReporter,
-    AdaptiveAcceleration
+    GlobalMeanUXReporter, WallQuantities, WallfunctionReporter, AdaptiveAcceleration
 )
 from lettuce.ext._force.Kupershtokh import ExactDifferenceForce
 
-# -----------------------------
-# CLI
-# -----------------------------
-p = argparse.ArgumentParser()
-p.add_argument("--outdir", type=str, default="./output/", help="Basisausgabeverzeichnis")
-p.add_argument("--h", type=int, default=20)
-p.add_argument("--Re", type=int, default=180)
-p.add_argument("--Mach", type=float, default=0.1)
-p.add_argument("--tmax", type=float, default=100.0)
-args = p.parse_args()
-
-# -----------------------------
-# Pfade/Umgebung
-# -----------------------------
-h = args.h
-Re = args.Re
-Mach = args.Mach
-tmax = args.tmax
-
+# ======================================================
+# ⚙️ Parameter
+# ======================================================
+h = 20
+Re = 180
+Mach = 0.1
+tmax = 100
 dtype = torch.float64
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-
-# output dir nach Schema
-basedir = os.path.join(
-    args.outdir,
-    f"Re{Re}",
-    f"h{h}",
-    f"Ma{Mach}",
-    f"tmax{int(tmax)}"
-)
-os.makedirs(basedir, exist_ok=True)
+basedir = "./output/"
 
 print(f"CUDA verfügbar: {torch.cuda.is_available()}")
 print(f"Device: {device}, Dtype: {dtype}")
-print(f"Output -> {basedir}")
 
-# -----------------------------
-# Context
-# -----------------------------
+# ======================================================
+# 💡 Kontext
+# ======================================================
 context = lt.Context(device=device, dtype=dtype, use_native=False)
 
-# -----------------------------
-# Simulations-Funktion
-# -----------------------------
+# ======================================================
+# 💡 Funktion für eine einzelne Simulation
+# ======================================================
 def run_channel_simulation(newton_speedup=True):
     print(f"\n=== Starte Simulation mit newton_speedup={newton_speedup} ===")
 
@@ -64,7 +39,7 @@ def run_channel_simulation(newton_speedup=True):
         reynolds_number=6432 if Re == 180 else Re ** (8 / 7) * (8 / 0.073) ** (4 / 7),
         stencil=D3Q19(),
         mach_number=Mach,
-        bbtype=None  # <- Deine Vorgabe bleibt!
+        bbtype=None
     )
 
     # Masken
@@ -76,7 +51,7 @@ def run_channel_simulation(newton_speedup=True):
     force = ExactDifferenceForce(flow, acceleration=[0, 0, 0])
     collision = lt.BGKCollision(tau=flow.units.relaxation_parameter_lu, force=force)
 
-    # Adaptive Acceleration (dein Code – unverändert)
+    # Adaptive Acceleration
     adaptive_accel = AdaptiveAcceleration(
         flow=flow,
         force_obj=force,
@@ -91,12 +66,12 @@ def run_channel_simulation(newton_speedup=True):
     wq_top    = WallQuantities(mask=mask_top,    wall="top",    flow=flow, newton_speedup=newton_speedup, context=context)
 
     simulation = lt.Simulation(flow=flow, collision=collision, reporter=[])
-    simulation.reporter.append(lt.ObservableReporter(global_mean_ux_reporter, interval=1,   out=None))
-    simulation.reporter.append(lt.ObservableReporter(wq_bottom,                 interval=100, out=None))
-    simulation.reporter.append(lt.ObservableReporter(wq_top,                    interval=100, out=None))
-    simulation.reporter.append(lt.ObservableReporter(adaptive_accel,            interval=50,  out=None))
+    simulation.reporter.append(lt.ObservableReporter(global_mean_ux_reporter, interval=1, out=None))
+    simulation.reporter.append(lt.ObservableReporter(wq_bottom, interval=100, out=None))
+    simulation.reporter.append(lt.ObservableReporter(wq_top,    interval=100, out=None))
+    simulation.reporter.append(lt.ObservableReporter(adaptive_accel, interval=50, out=None))
 
-    # WallFunction + Reporter (native via Reporter)
+    # WallFunction + Reporter
     collision_py = lt.BGKCollision(tau=flow.units.relaxation_parameter_lu, force=force)
     wfb_bottom = WallFunction(mask_bottom, flow.stencil, h, context, wall="bottom", newton_speedup=newton_speedup)
     wfb_top    = WallFunction(mask_top,    flow.stencil, h, context, wall="top",    newton_speedup=newton_speedup)
@@ -108,13 +83,12 @@ def run_channel_simulation(newton_speedup=True):
     wfb_reporter = WallfunctionReporter(context, flow, collision_py, mask_no_collision2, wfb_bottom, wfb_top)
     simulation.reporter.append(lt.ObservableReporter(wfb_reporter, interval=1, out=None))
 
-    # Run
+    # Simulation starten
     steps = int(flow.units.convert_time_to_lu(tmax))
     mlups = simulation.step(num_steps=steps)
 
-    # Ergebnisse: letzter Reporter = wfb_reporter
+    # Ergebnisse
     data_wfb = np.array(simulation.reporter[-1].out)
-    # Spalten: [iter, time, mean_it, max_it, ...]  <- du nutzt [2] & [3]
     mean_it = data_wfb[:, 2]
     max_it  = data_wfb[:, 3]
     time    = data_wfb[:, 1]
@@ -122,26 +96,16 @@ def run_channel_simulation(newton_speedup=True):
     print(f"Simulation beendet. MLUPS = {mlups:.2f}")
     return time, mean_it, max_it, mlups
 
-# -----------------------------
-# Beide Läufe
-# -----------------------------
-time_true,  mean_true,  max_true,  mlups_true  = run_channel_simulation(newton_speedup=True)
+# ======================================================
+# 💡 Beide Simulationen ausführen
+# ======================================================
+time_true, mean_true, max_true, mlups_true = run_channel_simulation(newton_speedup=True)
 time_false, mean_false, max_false, mlups_false = run_channel_simulation(newton_speedup=False)
 
-# -----------------------------
-# CSVs ablegen (optional, aber praktisch)
-# -----------------------------
-np.savetxt(os.path.join(basedir, "mean_max_true.csv"),
-           np.vstack([time_true, mean_true, max_true]).T,
-           delimiter=",", header="time,mean_it,max_it", comments="")
-np.savetxt(os.path.join(basedir, "mean_max_false.csv"),
-           np.vstack([time_false, mean_false, max_false]).T,
-           delimiter=",", header="time,mean_it,max_it", comments="")
-
-# -----------------------------
-# Plot
-# -----------------------------
-plt.figure(figsize=(6, 4))
+# ======================================================
+# 📈 Plot
+# ======================================================
+plt.figure(figsize=(6,4))
 plt.plot(time_true,  mean_true, "o-", label="MeanIt (Speedup=True)")
 plt.plot(time_true,  max_true,  "s--", label="MaxIt (Speedup=True)")
 plt.plot(time_false, mean_false,"x-", label="MeanIt (Speedup=False)")
@@ -150,12 +114,16 @@ plt.xlabel("Zeit [LU]")
 plt.ylabel("Iterationsanzahl")
 plt.title("Newton-Speedup Vergleich: mean_it und max_it (mit AdaptiveAcceleration)")
 plt.legend(); plt.grid(); plt.tight_layout()
-plot_path = os.path.join(basedir, "newton_speedup_iterations_adaptive.pdf")
-plt.savefig(plot_path)
+
+os.makedirs(basedir, exist_ok=True)
+plt.savefig(os.path.join(basedir,"newton_speedup_iterations_adaptive.pdf"))
 plt.close()
 
+# ======================================================
+# 💬 Zusammenfassung
+# ======================================================
 print("\n--- Leistungsübersicht (mit AdaptiveAcceleration) ---")
 print(f"MLUPS (Speedup=True):  {mlups_true:.2f}")
 print(f"MLUPS (Speedup=False): {mlups_false:.2f}")
 print(f"Speedup-Faktor:        {mlups_true / mlups_false:.2f}x")
-print(f"Plot gespeichert unter: {plot_path}")
+print(f"Plot gespeichert unter: {basedir}newton_speedup_iterations_adaptive.pdf")
