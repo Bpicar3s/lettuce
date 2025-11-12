@@ -14,7 +14,7 @@ import argparse
 parser = argparse.ArgumentParser()
 parser.add_argument("--Re", type=int, default=180)
 parser.add_argument("--h", type=int, default=20)
-parser.add_argument("--tmax", type=float, default=0.1)
+parser.add_argument("--tmax", type=float, default=1)
 parser.add_argument("--Precision", type=str, default="Double")
 parser.add_argument("--Mach", type=float, default=0.1)
 parser.add_argument("--output", type=str, default="./output/")

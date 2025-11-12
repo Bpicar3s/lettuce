@@ -363,4 +363,4 @@ class WallfunctionReporter(Observable):
         max_it = max(self.wfb_bottom.max_it,self.wfb_top.max_it)
 
         # (3) Optional Logging
-        return mean_it, max_it
+        return mean_it.cpu(), max_it.cpu()
