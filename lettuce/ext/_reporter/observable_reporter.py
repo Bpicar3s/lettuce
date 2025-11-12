@@ -360,7 +360,7 @@ class WallfunctionReporter(Observable):
         #            self.wfb_bottom(self.flow), self.flow.f, out=self.flow.f)
 
         mean_it = (self.wfb_bottom.mean_it+self.wfb_top.mean_it)*0.5
-        max_it = (self.wfb_bottom.max_it+self.wfb_top.max_it)*0.5
+        max_it = max(self.wfb_bottom.max_it,self.wfb_top.max_it)
 
         # (3) Optional Logging
         return mean_it, max_it

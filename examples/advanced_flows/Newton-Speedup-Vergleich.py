@@ -8,14 +8,13 @@ from lettuce.ext._reporter.observable_reporter import (
 )
 from lettuce.ext._force.Kupershtokh import ExactDifferenceForce
 import argparse
-
 # ======================================================
 # ⚙️ Argumente
 # ======================================================
 parser = argparse.ArgumentParser()
 parser.add_argument("--Re", type=int, default=180)
 parser.add_argument("--h", type=int, default=20)
-parser.add_argument("--tmax", type=float, default=100)
+parser.add_argument("--tmax", type=float, default=0.1)
 parser.add_argument("--Precision", type=str, default="Double")
 parser.add_argument("--Mach", type=float, default=0.1)
 parser.add_argument("--output", type=str, default="./output/")
@@ -45,7 +44,7 @@ def to_numpy_safe(x):
     """Konvertiert Tensoren sicher zu NumPy, egal ob auf CPU oder GPU."""
     if isinstance(x, torch.Tensor):
         return x.detach().cpu().numpy()
-    return np.array(x)
+    return to_numpy_safe(x)
 
 # ======================================================
 # 💡 Simulation
@@ -65,7 +64,7 @@ def run_channel_simulation(newton_speedup=True):
     # Masken
     shape = flow.resolution
     mask_bottom = torch.zeros(shape, dtype=torch.bool, device=device); mask_bottom[:, 0, :] = True
-    mask_top    = torch.zeros(shape, dtype=torch.bool, device=device); mask_top[:, -1, :] = True
+    mask_top = torch.zeros(shape, dtype=torch.bool, device=device); mask_top[:, -1, :] = True
 
     # Force & Collision
     force = ExactDifferenceForce(flow, acceleration=[0, 0, 0])
@@ -108,10 +107,11 @@ def run_channel_simulation(newton_speedup=True):
     mlups = simulation.step(num_steps=steps)
 
     # Ergebnisse sicher konvertieren
-    data_wfb = to_numpy_safe(simulation.reporter[-1].out)
-    mean_it = data_wfb[:, 2]
-    max_it  = data_wfb[:, 3]
-    time    = data_wfb[:, 1]
+    # Reporter-Daten direkt als NumPy-Array holen (CPU-kompatibel)
+    data_wfb = np.array([np.array(row) for row in simulation.reporter[-1].out])
+    mean_it = data_wfb[:, 2].astype(float)
+    max_it = data_wfb[:, 3].astype(float)
+    time = data_wfb[:, 1].astype(float)
 
     print(f"Simulation beendet. MLUPS = {mlups:.2f}")
     return time, mean_it, max_it, mlups
