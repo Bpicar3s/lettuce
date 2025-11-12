@@ -7,9 +7,11 @@ from lettuce.ext._reporter.observable_reporter import (
     GlobalMeanUXReporter, WallQuantities, WallfunctionReporter, AdaptiveAcceleration
 )
 from lettuce.ext._force.Kupershtokh import ExactDifferenceForce
+import argparse
 
-import argparse, os
-
+# ======================================================
+# ⚙️ Argumente
+# ======================================================
 parser = argparse.ArgumentParser()
 parser.add_argument("--Re", type=int, default=180)
 parser.add_argument("--h", type=int, default=20)
@@ -19,7 +21,7 @@ parser.add_argument("--Mach", type=float, default=0.1)
 parser.add_argument("--output", type=str, default="./output/")
 args = parser.parse_args()
 
-# Nutze Argumente statt fixer Werte
+# Parameter
 Re = args.Re
 h = args.h
 tmax = args.tmax
@@ -37,7 +39,16 @@ print(f"Device: {device}, Dtype: {dtype}")
 context = lt.Context(device=device, dtype=dtype, use_native=False)
 
 # ======================================================
-# 💡 Funktion für eine einzelne Simulation
+# 🧠 Hilfsfunktion: sichere GPU→CPU→NumPy-Konvertierung
+# ======================================================
+def to_numpy_safe(x):
+    """Konvertiert Tensoren sicher zu NumPy, egal ob auf CPU oder GPU."""
+    if isinstance(x, torch.Tensor):
+        return x.detach().cpu().numpy()
+    return np.array(x)
+
+# ======================================================
+# 💡 Simulation
 # ======================================================
 def run_channel_simulation(newton_speedup=True):
     print(f"\n=== Starte Simulation mit newton_speedup={newton_speedup} ===")
@@ -96,8 +107,8 @@ def run_channel_simulation(newton_speedup=True):
     steps = int(flow.units.convert_time_to_lu(tmax))
     mlups = simulation.step(num_steps=steps)
 
-    # Ergebnisse
-    data_wfb = np.array(simulation.reporter[-1].out)
+    # Ergebnisse sicher konvertieren
+    data_wfb = to_numpy_safe(simulation.reporter[-1].out)
     mean_it = data_wfb[:, 2]
     max_it  = data_wfb[:, 3]
     time    = data_wfb[:, 1]
