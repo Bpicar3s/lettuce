@@ -128,6 +128,39 @@ plt.tight_layout()
 plt.savefig(basedir + "newton_speedup_iterations_adaptive.pdf")
 plt.show()
 
+import os
+import json
+
+# Sicherstellen, dass der Output-Ordner existiert
+os.makedirs(basedir, exist_ok=True)
+
+# ======================================================
+# 💾 Daten speichern
+# ======================================================
+data = {
+    "time_true": time_true.tolist(),
+    "mean_true": mean_true.tolist(),
+    "max_true": max_true.tolist(),
+    "time_false": time_false.tolist(),
+    "mean_false": mean_false.tolist(),
+    "max_false": max_false.tolist(),
+    "mlups_true": float(mlups_true),
+    "mlups_false": float(mlups_false)
+}
+
+json_path = os.path.join(basedir, "newton_speedup_data.json")
+npz_path = os.path.join(basedir, "newton_speedup_data.npz")
+
+# JSON (leicht lesbar) und NumPy (kompakt) speichern
+with open(json_path, "w") as f:
+    json.dump(data, f, indent=2)
+np.savez(npz_path, **data)
+
+print(f"\n✅ Daten gespeichert unter:")
+print(f"  JSON: {json_path}")
+print(f"  NPZ:  {npz_path}")
+
+
 # ======================================================
 # 💬 Zusammenfassung
 # ======================================================
