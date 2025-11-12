@@ -26,7 +26,7 @@ h = args.h
 tmax = args.tmax
 Mach = args.Mach
 basedir = args.output
-dtype = torch.float64 if args.Precision == "Double" else torch.float32
+dtype = torch.float64
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 print(f"CUDA verfügbar: {torch.cuda.is_available()}")
