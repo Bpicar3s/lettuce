@@ -11,10 +11,10 @@ from lettuce.ext._force.Kupershtokh import ExactDifferenceForce
 # ======================================================
 # ⚙️ Parameter
 # ======================================================
-h = 10
+h = 20
 Re = 180
 Mach = 0.1
-tmax = 1  # Ggf. tmax erhöhen, damit die Adaption Zeit hat zu wirken
+tmax = 100  # Ggf. tmax erhöhen, damit die Adaption Zeit hat zu wirken
 
 dtype = torch.float64
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
