@@ -8,16 +8,25 @@ from lettuce.ext._reporter.observable_reporter import (
 )
 from lettuce.ext._force.Kupershtokh import ExactDifferenceForce
 
-# ======================================================
-# ⚙️ Parameter
-# ======================================================
-h = 20
-Re = 180
-Mach = 0.1
-tmax = 100
-dtype = torch.float64
+import argparse, os
+
+parser = argparse.ArgumentParser()
+parser.add_argument("--Re", type=int, default=180)
+parser.add_argument("--h", type=int, default=20)
+parser.add_argument("--tmax", type=float, default=100)
+parser.add_argument("--Precision", type=str, default="Double")
+parser.add_argument("--Mach", type=float, default=0.1)
+parser.add_argument("--output", type=str, default="./output/")
+args = parser.parse_args()
+
+# Nutze Argumente statt fixer Werte
+Re = args.Re
+h = args.h
+tmax = args.tmax
+Mach = args.Mach
+basedir = args.output
+dtype = torch.float64 if args.Precision == "Double" else torch.float32
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
-basedir = "./output/"
 
 print(f"CUDA verfügbar: {torch.cuda.is_available()}")
 print(f"Device: {device}, Dtype: {dtype}")
