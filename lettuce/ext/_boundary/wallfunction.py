@@ -11,7 +11,7 @@ import torch
 
 
 def solve_u_tau_exact(y, u, nu,
-                      max_iter=10, tol=1e-7,
+                      max_iter=10, tol=1e-6,
                       KAPPA=0.4187, B=5.5,
                       damping=1.0, utau_prev=None, newton_speedup = False):
     device = u.device
