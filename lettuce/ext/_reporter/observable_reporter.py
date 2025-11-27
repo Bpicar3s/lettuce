@@ -364,3 +364,68 @@ class WallfunctionReporter(Observable):
 
         # (3) Optional Logging
         return mean_it.cpu(), max_it.cpu()
+
+class ReynoldsStress(Observable):
+    """
+    Computes Reynolds stresses:
+        <u'u'>, <v'v'>, <w'w'>, <u'v'>
+    with x,z-averaging each sample and temporal averaging over many reporter calls.
+    """
+
+    def __init__(self, flow):
+        super().__init__(flow)
+        self.flow = flow
+        self.context = flow.context
+
+        self.initialized = False
+        self.n_samples = 0
+
+    @torch.no_grad()
+    def __call__(self, f=None):
+        # --- 1) Hole Geschwindigkeit ---
+        u = self.flow.u()  # shape [3, Nx, Ny, Nz]
+        ux, uy, uz = u[0], u[1], u[2]
+
+        # --- 2) Mittelwerte über x,z pro y ---
+        U_y = ux.mean(dim=(0, 2))
+        V_y = uy.mean(dim=(0, 2))
+        W_y = uz.mean(dim=(0, 2))
+
+        # --- 3) Initialisieren (einmalig) ---
+        if not self.initialized:
+            Ny = U_y.shape[0]
+            device = self.flow.f.device
+            dtype = self.flow.f.dtype
+
+            self.meanU = torch.zeros(Ny, device=device, dtype=dtype)
+            self.meanV = torch.zeros(Ny, device=device, dtype=dtype)
+            self.meanW = torch.zeros(Ny, device=device, dtype=dtype)
+
+            self.UU = torch.zeros(Ny, device=device, dtype=dtype)
+            self.VV = torch.zeros(Ny, device=device, dtype=dtype)
+            self.WW = torch.zeros(Ny, device=device, dtype=dtype)
+            self.UV = torch.zeros(Ny, device=device, dtype=dtype)
+
+            self.initialized = True
+
+        # --- 4) Fluktuationen ---
+        u_fluc = ux - U_y[None, :, None]
+        v_fluc = uy - V_y[None, :, None]
+        w_fluc = uz - W_y[None, :, None]
+
+        uu_y = (u_fluc * u_fluc).mean(dim=(0, 2))
+        vv_y = (v_fluc * v_fluc).mean(dim=(0, 2))
+        ww_y = (w_fluc * w_fluc).mean(dim=(0, 2))
+        uv_y = (u_fluc * v_fluc).mean(dim=(0, 2))
+
+        # --- 5) Running sums für Zeitmittel ---
+        self.UU += uu_y
+        self.VV += vv_y
+        self.WW += ww_y
+        self.UV += uv_y
+
+        self.n_samples += 1
+
+        # --- 6) Return instantaneous sample (für CSV logs) ---
+        # Wir speichern je nach Geschmack nur die instantaneous Profile:
+        return torch.cat([uu_y, vv_y, ww_y, uv_y])
