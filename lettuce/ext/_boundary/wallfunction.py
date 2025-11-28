@@ -129,7 +129,7 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
 
     tau_w = rho_wall * (utau ** 2)
     u_tau_ref = torch.sqrt(tau_w.mean() / rho_wall.mean())
-    re_tau_ref = (ny / 2) * u_tau_ref / viscosity
+    re_tau_ref = (ny / 2) * utau.mean() / viscosity
 
     return utau, yplus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it
 
