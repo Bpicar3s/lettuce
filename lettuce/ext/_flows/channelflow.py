@@ -123,7 +123,8 @@ class ChannelFlow3D(ExtFlow):
             def round8(x):
                 return int(np.ceil(x / 8) * 8)
 
-            return [lx,ly,lz]  # [round8(lx), round8(ly), round8(lz)]
+            return [int(lx), int(ly), int(lz)]
+              # [round8(lx), round8(ly), round8(lz)]
         assert len(resolution) == 3, "ChannelFlow3D erwartet 3D-Auflösung!"
         return resolution
 
