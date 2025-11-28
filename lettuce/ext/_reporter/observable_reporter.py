@@ -306,7 +306,7 @@ class AdaptiveAcceleration(Observable):
         u_field = self.flow.u()
         ux_mean = torch.mean(u_field[0])
 
-        H = max(float(self.flow.h), 1.0)
+        H = max(float(self.flow.resolution[1]), 1.0)
         Fx_base = (utau_mean ** 2) / H
         Fx_reg = self.k_gain * (self.target_mean_ux_lu - ux_mean) * (self.target_mean_ux_lu / H)
         Fx = (Fx_base + Fx_reg).to(device=self.context.device, dtype=self.flow.f.dtype)
@@ -428,4 +428,5 @@ class ReynoldsStress(Observable):
 
         # --- 6) Return instantaneous sample (für CSV logs) ---
         # Wir speichern je nach Geschmack nur die instantaneous Profile:
+
         return torch.cat([uu_y, vv_y, ww_y, uv_y])
