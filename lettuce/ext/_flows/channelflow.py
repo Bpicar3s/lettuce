@@ -240,9 +240,9 @@ class ChannelFlow3D(ExtFlow):
         self.mask_top[:, -1, :] = True
 
         if self.bbtype == "wallfunction":
-            wfb_bottom = WallFunction(mask=self.mask_bottom, stencil=self.stencil, h=self.resolution[1], context=self.context,
+            wfb_bottom = WallFunction(mask=self.mask_bottom, stencil=self.stencil, h=self.h, context=self.context,
                                       wall='bottom')
-            wfb_top = WallFunction(mask=self.mask_top, stencil=self.stencil, h=self.resolution[1], context=self.context, wall='top')
+            wfb_top = WallFunction(mask=self.mask_top, stencil=self.stencil, h=self.h, context=self.context, wall='top')
             boundary = [wfb_bottom, wfb_top]
         elif self.bbtype == "fullway":
             wfb_bottom = BounceBackBoundary(mask=self.mask_top)
