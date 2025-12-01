@@ -256,8 +256,8 @@ class WallQuantities(Observable):
 
         # Plus-Skalierung
         # dy = 1.0 ist korrekt in DEINEM Setup
-        y_plus_profile = y * u_tau / viscosity
-        U_plus_profile = U_sym / u_tau
+        y_plus_profile = y * u_tau.mean() / viscosity
+        U_plus_profile = U_sym / u_tau.mean()
 
         # --- 3. Logging ---
         print(
