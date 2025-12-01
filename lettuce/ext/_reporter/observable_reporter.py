@@ -240,8 +240,8 @@ class WallQuantities(Observable):
         y = torch.arange(mid, device=self.flow.f.device, dtype=self.flow.f.dtype)
 
         # Plus-Skalierung
-        y_plus_profile = y * u_tau_ref / viscosity
-        U_plus_profile = U_mean_y / u_tau_ref
+        y_plus_profile = y * u_tau / viscosity
+        U_plus_profile = U_mean_y / u_tau
 
         # --- 3. Logging ---
         print(
