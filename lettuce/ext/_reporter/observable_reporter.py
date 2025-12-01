@@ -209,39 +209,55 @@ class WallQuantities(Observable):
 
     def __call__(self, f: Optional[torch.Tensor] = None):
         # --- 1. Wandgrößen ---
-        u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
-            flow=self.flow,
-            dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
-            is_top=True if self.wall == "top" else False
-        )
         if self.newton_speedup:
             u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
                 flow=self.flow,
                 dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
-                is_top=True if self.wall == "top" else False,
-                newton_speedup=self.newton_speedup,
+                is_top=(self.wall == "top"),
+                newton_speedup=True,
                 utau_prev=self.utau_prev
             )
+        else:
+            u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
+                flow=self.flow,
+                dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
+                is_top=(self.wall == "top")
+            )
+
         self.utau_prev = u_tau
 
         # --- 2. Mittleres Profil U(y) ---
         viscosity = self.flow.units.viscosity_lu
 
-        u = self.flow.u()
+        # Volle Geschwindigkeit
+        u = self.flow.u()  # shape: [3, nx, ny, nz]
 
-        ny = self.flow.resolution[1]
+        # Tangentialgeschwindigkeit (x und z)
+        u_tan = torch.sqrt(u[0] ** 2 + u[2] ** 2)
+
+        nx, ny, nz = u_tan.shape
+
         mid = ny // 2
 
-        # Mittel über x,z
-        U_mean_y = torch.mean(torch.mean(u[0], dim=0), dim=-1)
+        # Mittel über x,z-Dimensionen
+        U_y = torch.mean(torch.mean(u_tan, dim=0), dim=-1)  # shape [ny]
 
-        # Nur halbes Profil (bis Mitte)
-        U_mean_y = U_mean_y[:mid]
+        # Obere Hälfte
+        U_top = U_y[:mid]
+
+        # Untere Hälfte (gespiegelt)
+        U_bot = torch.flip(U_y[-mid:], dims=[0])
+
+        # Symmetrisch gemitteltes Profil
+        U_sym = 0.5 * (U_top + U_bot)
+
+        # y-Koordinaten (j = 0..mid-1)
         y = torch.arange(mid, device=self.flow.f.device, dtype=self.flow.f.dtype)
 
         # Plus-Skalierung
+        # dy = 1.0 ist korrekt in DEINEM Setup
         y_plus_profile = y * u_tau / viscosity
-        U_plus_profile = U_mean_y / u_tau
+        U_plus_profile = U_sym / u_tau
 
         # --- 3. Logging ---
         print(
