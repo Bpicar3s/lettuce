@@ -191,7 +191,7 @@ class WallFunction(Boundary):
             u_x = u[0][mask_fluidcell]
             acceleration = 0
         else:
-            u_x = u[0][mask_fluidcell]+ self.force.acceleration[0]
+            u_x = u[0][mask_fluidcell]
             acceleration = self.force.acceleration[0]
 
 
