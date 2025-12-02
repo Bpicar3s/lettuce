@@ -45,7 +45,7 @@ def solve_u_tau_exact(y, u, nu,
 
             u_plus = u / utau
             ku = KAPPA * u_plus
-            exp_ku = torch.exp(ku.clamp(-50, 50))
+            exp_ku = torch.exp(ku)
 
             rhs = u_plus + A * (exp_ku - 1.0 - ku - 0.5 * ku ** 2 - (1.0 / 6.0) * ku ** 3)
             lhs = y * utau / nu
@@ -100,7 +100,7 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
 
         utau, mean_it, max_it = solve_u_tau_exact(
             y=dy,
-            u=torch.sqrt((u[0,mask]+acceleration)**2+u[2,mask]**2),
+            u=torch.sqrt((u[0,mask])**2+u[2,mask]**2),
             nu=viscosity,
             newton_speedup = newton_speedup,
             utau_prev = utau_prev,
