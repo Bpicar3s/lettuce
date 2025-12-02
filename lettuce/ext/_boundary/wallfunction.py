@@ -198,7 +198,7 @@ class WallFunction(Boundary):
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
-        y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
+        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
 
         u_tau, yplus, re_tau, _, _, self.mean_it, self.max_it = compute_wall_quantities(flow, y,
                                                                    is_top=True if self.wall == "top" else False,

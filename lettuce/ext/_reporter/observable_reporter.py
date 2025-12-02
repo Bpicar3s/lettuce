@@ -315,8 +315,8 @@ class AdaptiveAcceleration(Observable):
         """
         Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
-        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
+        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=0.5, is_top=False)
+        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=0.5, is_top=True)
         utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()
