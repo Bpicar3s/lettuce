@@ -84,10 +84,10 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
 
     u = flow.u()
     if is_top == True:
-        mask = torch.zeros_like(u, dtype=torch.bool)
+        mask = torch.zeros_like(u[0], dtype=torch.bool)
         mask[:, -2, :] = True
     elif is_top == False:
-        mask = torch.zeros_like(u, dtype=torch.bool)
+        mask = torch.zeros_like(u[0], dtype=torch.bool)
         mask[:, 1, :] = True
 
 
