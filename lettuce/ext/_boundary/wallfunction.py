@@ -82,16 +82,16 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
     """
     method = "Spalding"
 
-
+    u = flow.u()
     if is_top == True:
-        mask = torch.zeros(flow.resolution, dtype=torch.bool)
+        mask = torch.zeros_like(u, dtype=torch.bool)
         mask[:, -2, :] = True
     elif is_top == False:
-        mask = torch.zeros(flow.resolution, dtype=torch.bool)
+        mask = torch.zeros_like(u, dtype=torch.bool)
         mask[:, 1, :] = True
 
 
-    u = flow.u()
+
     viscosity = flow.units.viscosity_lu
     ny = flow.resolution[1]
 
@@ -198,7 +198,7 @@ class WallFunction(Boundary):
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
-        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
+        y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
         u_tau, yplus, re_tau, _, _, self.mean_it, self.max_it = compute_wall_quantities(flow, y,
                                                                    is_top=True if self.wall == "top" else False,
@@ -298,8 +298,8 @@ class WallFunction(Boundary):
 
 
 class WallFunction2(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall='bottom', kappa=0.4187, B=5.5, max_iter=100,
-                 tol=1e-8):
+    def __init__(self, mask, stencil, h, context: 'Context', wall='bottom', kappa=0.4187, B=5.5, max_iter=10,
+                 tol=1e-6):
         self.context = context
 
         self.mask = self.context.convert_to_tensor(mask)
@@ -349,7 +349,7 @@ class WallFunction2(Boundary):
         u_z = u[2][mask_fluidcell]
         safe_u = torch.sqrt(u_x ** 2 + u_z ** 2)
 
-        y = torch.tensor(0.5, device=flow.f.device, dtype=flow.f.dtype)
+        y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
 
         u_tau, yplus, re_tau = compute_wall_quantities(flow, y, is_top=True if self.wall == "top" else False)
         tau_w = rho[:, mask_fluidcell] * u_tau ** 2

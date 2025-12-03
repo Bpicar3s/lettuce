@@ -212,7 +212,7 @@ class WallQuantities(Observable):
         if self.newton_speedup:
             u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
                 flow=self.flow,
-                dy=torch.tensor(0.5, device=self.flow.f.device, dtype=self.flow.f.dtype),
+                dy=torch.tensor(1, device=self.flow.f.device, dtype=self.flow.f.dtype),
                 is_top=(self.wall == "top"),
                 newton_speedup=True,
                 utau_prev=self.utau_prev
@@ -220,7 +220,7 @@ class WallQuantities(Observable):
         else:
             u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
                 flow=self.flow,
-                dy=torch.tensor(0.5, device=self.flow.f.device, dtype=self.flow.f.dtype),
+                dy=torch.tensor(1, device=self.flow.f.device, dtype=self.flow.f.dtype),
                 is_top=(self.wall == "top")
             )
 
@@ -253,8 +253,7 @@ class WallQuantities(Observable):
 
         # y-Koordinaten (j = 0..mid-1)
         y = torch.arange(mid, device=self.flow.f.device, dtype=self.flow.f.dtype)
-        y = y - 0.5
-        y[0] = 0
+
         # Plus-Skalierung
         # dy = 1.0 ist korrekt in DEINEM Setup
         y_plus_profile = y * u_tau.mean() / viscosity
@@ -316,8 +315,8 @@ class AdaptiveAcceleration(Observable):
         """
         Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=0.5, is_top=False)
-        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=0.5, is_top=True)
+        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
+        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
         utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()
