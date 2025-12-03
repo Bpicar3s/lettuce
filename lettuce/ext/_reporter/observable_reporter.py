@@ -212,7 +212,7 @@ class WallQuantities(Observable):
         if self.newton_speedup:
             u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
                 flow=self.flow,
-                dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
+                dy=torch.tensor(0.5, device=self.flow.f.device, dtype=self.flow.f.dtype),
                 is_top=(self.wall == "top"),
                 newton_speedup=True,
                 utau_prev=self.utau_prev
@@ -220,7 +220,7 @@ class WallQuantities(Observable):
         else:
             u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
                 flow=self.flow,
-                dy=torch.tensor(1.0, device=self.flow.f.device, dtype=self.flow.f.dtype),
+                dy=torch.tensor(0.5, device=self.flow.f.device, dtype=self.flow.f.dtype),
                 is_top=(self.wall == "top")
             )
 
@@ -253,7 +253,8 @@ class WallQuantities(Observable):
 
         # y-Koordinaten (j = 0..mid-1)
         y = torch.arange(mid, device=self.flow.f.device, dtype=self.flow.f.dtype)
-
+        y = y - 0.5
+        y[0] = 0
         # Plus-Skalierung
         # dy = 1.0 ist korrekt in DEINEM Setup
         y_plus_profile = y * u_tau.mean() / viscosity
@@ -407,23 +408,6 @@ class ReynoldsStress(Observable):
         V_y = uy.mean(dim=(0, 2))
         W_y = uz.mean(dim=(0, 2))
 
-        # --- 3) Initialisieren (einmalig) ---
-        if not self.initialized:
-            Ny = U_y.shape[0]
-            device = self.flow.f.device
-            dtype = self.flow.f.dtype
-
-            self.meanU = torch.zeros(Ny, device=device, dtype=dtype)
-            self.meanV = torch.zeros(Ny, device=device, dtype=dtype)
-            self.meanW = torch.zeros(Ny, device=device, dtype=dtype)
-
-            self.UU = torch.zeros(Ny, device=device, dtype=dtype)
-            self.VV = torch.zeros(Ny, device=device, dtype=dtype)
-            self.WW = torch.zeros(Ny, device=device, dtype=dtype)
-            self.UV = torch.zeros(Ny, device=device, dtype=dtype)
-
-            self.initialized = True
-
         # --- 4) Fluktuationen ---
         u_fluc = ux - U_y[None, :, None]
         v_fluc = uy - V_y[None, :, None]
@@ -433,14 +417,6 @@ class ReynoldsStress(Observable):
         vv_y = (v_fluc * v_fluc).mean(dim=(0, 2))
         ww_y = (w_fluc * w_fluc).mean(dim=(0, 2))
         uv_y = (u_fluc * v_fluc).mean(dim=(0, 2))
-
-        # --- 5) Running sums für Zeitmittel ---
-        self.UU += uu_y
-        self.VV += vv_y
-        self.WW += ww_y
-        self.UV += uv_y
-
-        self.n_samples += 1
 
         # --- 6) Return instantaneous sample (für CSV logs) ---
         # Wir speichern je nach Geschmack nur die instantaneous Profile:
