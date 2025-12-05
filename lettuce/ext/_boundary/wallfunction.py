@@ -52,14 +52,14 @@ def solve_u_tau_exact(y, u, nu,
             F = lhs - rhs
 
             drhs_duplus = 1.0 + A * (KAPPA * exp_ku - KAPPA - (KAPPA ** 2) * u_plus - 0.5 * (KAPPA ** 3) * u_plus ** 2)
-            duplus_dutau = -u / utau.pow(2)
+            duplus_dutau = -u / utau**2
             dF = (y / nu) - drhs_duplus * duplus_dutau
 
             delta = F / dF
             utau_new = (utau - damping * delta)
 
             utau = torch.where(active, utau_new, utau)
-            conv = delta.abs() < tol
+            conv = (delta/utau).abs() < tol
             just = active & conv
             active = active & (~conv)
             iters = iters + just.to(iters.dtype) + active.to(iters.dtype)

@@ -283,10 +283,7 @@ class WallQuantities(Observable):
 
 class GlobalMeanUXReporter(Observable):
     def __call__(self, f: Optional[torch.Tensor] = None):
-        u_field_lu = self.flow.u()  # u_field_lu: shape (3, Nx, Ny, Nz)
-        u_x_spatial = u_field_lu[0]     # Nur die x-Komponente
-        current_mean_ux_lu = torch.mean(u_x_spatial)
-        return current_mean_ux_lu
+        return torch.mean(self.flow.u()[0, :, 1:-1, :])
 
 from lettuce.ext._boundary.wallfunction import compute_wall_quantities
 class AdaptiveAcceleration(Observable):
@@ -320,7 +317,7 @@ class AdaptiveAcceleration(Observable):
         utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()
-        ux_mean = torch.mean(u_field[0])
+        ux_mean = torch.mean(u_field[0, :, 1:-1, :])
 
         H = self.flow.h
         Fx_base = (utau_mean ** 2) / H
@@ -362,9 +359,9 @@ class WallfunctionReporter(Observable):
     @torch.no_grad()
     def __call__(self, f):
         # (1) Python-Kollision nur auf Zellen ohne Maskierung (z. B. erste Fluidreihe)
-        #torch.where(torch.eq(self.no_collision_mask, 0),
-        #            self.collision_py(self.flow), self.flow.f,
-        #            out=self.flow.f)
+        torch.where(torch.eq(self.no_collision_mask, 0),
+                    self.collision_py(self.flow), self.flow.f,
+                    out=self.flow.f)
 
         # (2) Danach Wandfunktionen aufrufen (lesen u und rho nach Collision)
         self.wfb_bottom(self.flow)

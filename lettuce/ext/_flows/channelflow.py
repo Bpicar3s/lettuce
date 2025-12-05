@@ -59,9 +59,9 @@ class DummyBoundary(Boundary):
 
         # Dein "Trick": y=0,1 und y=-1,-2 überspringen
         mask[:, 0, :] = True
-        #mask[:, 1, :] = True
+        mask[:, 1, :] = True
         mask[:, -1, :] = True
-        #mask[:, -2, :] = True
+        mask[:, -2, :] = True
 
         return mask
 
