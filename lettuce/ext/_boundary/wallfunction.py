@@ -12,7 +12,7 @@ import torch
 
 def solve_u_tau_exact(y, u, nu,
                       max_iter=10, tol=1e-6,
-                      KAPPA=0.4187, B=5.5,
+                      KAPPA=0.41, B=5.5,
                       damping=1.0, utau_prev=None, newton_speedup = False):
     device = u.device
     dtype = u.dtype
@@ -138,7 +138,7 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
 
 
 class WallFunction(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.4187, B=5.5, max_iter = 100, tol = 1e-8, force=None, newton_speedup = False):
+    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.41, B=5.5, max_iter = 10, tol = 1e-6, force=None, newton_speedup = False):
         self.context = context
 
         self.mask = self.context.convert_to_tensor(mask)
@@ -298,7 +298,7 @@ class WallFunction(Boundary):
 
 
 class WallFunction2(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall='bottom', kappa=0.4187, B=5.5, max_iter=10,
+    def __init__(self, mask, stencil, h, context: 'Context', wall='bottom', kappa=0.41, B=5.5, max_iter=10,
                  tol=1e-6):
         self.context = context
 
