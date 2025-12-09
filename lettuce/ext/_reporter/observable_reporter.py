@@ -294,33 +294,36 @@ class AdaptiveAcceleration(Observable):
     """
 
     def __init__(self, flow, force_obj, target_mean_ux_lu,
-                 context,
+                 context, Re_tau,
                  k_gain: float = 1.0):
         super().__init__(flow)
         self.force = force_obj
         self.target_mean_ux_lu = target_mean_ux_lu
         self.context = context
         self.k_gain = k_gain
-
+        self.Re_tau = Re_tau
         # interner Zustand (aktueller Beschleunigungsvektor in LU)
         self.current_accel = context.convert_to_tensor(
             [0.0] * flow.stencil.d, dtype=flow.f.dtype
         )
+        self.utau = self.Re_tau*flow.units.viscosity_lu/flow.h
 
     @torch.no_grad()
     def compute_acceleration(self):
         """
         Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
-        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
-        utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
+        #utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
+        #utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
+        #utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()
         ux_mean = torch.mean(u_field[0, :, 1:-1, :])
 
         H = self.flow.h
-        Fx_base = (utau_mean ** 2) / H
+        #Fx_base = (utau_mean ** 2) / H
+        Fx_base = (self.utau ** 2) / H
+
         Fx_reg = self.k_gain * (self.target_mean_ux_lu - ux_mean) * (self.target_mean_ux_lu / H)
         Fx = (Fx_base + Fx_reg).to(device=self.context.device, dtype=self.flow.f.dtype)
 
