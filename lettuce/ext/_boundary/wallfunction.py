@@ -80,7 +80,7 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
     :param is_top: True für obere Wand, sonst untere
     :return: (u_tau, y+, Re_tau) als Tensors
     """
-    method = "Spalding"
+    method = "Log-Visc"
 
     u = flow.u()
     if is_top == True:
