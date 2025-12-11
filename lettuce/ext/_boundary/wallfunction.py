@@ -119,8 +119,8 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
 
         # Alte utau-Werte an diesen Stellen ersetzen
         utau[loglaw_mask] = utau_log
-        max_it=1
-        mean_it=1
+        mean_it = torch.tensor(1.0, device=utau.device, dtype=utau.dtype)
+        max_it = torch.tensor(1.0, device=utau.device, dtype=utau.dtype)
 
     # yplus entsprechend neu berechnen
     yplus = dy * utau / viscosity
