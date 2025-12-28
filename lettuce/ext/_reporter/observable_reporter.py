@@ -328,13 +328,6 @@ class AdaptiveAcceleration(Observable):
         Fx = (Fx_base + Fx_reg).to(device=self.context.device, dtype=self.flow.f.dtype)
 
         # ================================================================
-        # DEBUG-PRINT HINZUFÜGEN:
-        print(f"[Schritt {self.flow.i}] REPORTER LÄUFT. "
-              f"Berechnete Fx = {Fx.item():.6e} "
-              f"(Target_u: {self.target_mean_ux_lu:.3f}, "
-              f"Actual_u: {ux_mean.item():.3f})")
-        # ================================================================
-
         acc = torch.stack([Fx] + [torch.zeros_like(Fx)] * (self.flow.stencil.d - 1))
         self.current_accel = acc
         self.force.acceleration.copy_(acc)
