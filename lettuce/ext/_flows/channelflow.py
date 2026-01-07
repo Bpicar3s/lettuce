@@ -159,6 +159,71 @@ class ChannelFlow3D(ExtFlow):
 
     def initial_pu(self):
         """
+        Init wie in Nathen et al. / Bespalko-Setup:
+          u(z) = u_char * (z/H)^(1/7)
+        + Gaussian Perturbations u', v', w' ~ N(0, sigma) mit sigma=5% (relativ zu u_char)
+        """
+
+        rng = np.random.default_rng(self.random_seed)
+
+        xg, yg, zg = self.grid
+        nx, ny, nz = self.resolution
+
+        # Druck/Dichte initial
+        p = np.ones_like(xg)[None, ...]
+        u = np.zeros((3, nx, ny, nz), dtype=np.float64)
+
+        # -----------------------------
+        # 1) 1/7 power law Profil
+        # -----------------------------
+        # Halbhöhe H in "Index-Länge" (Zellenabstand = 1)
+        # ny = 2H -> H ~ (ny-1)/2 (weil y=0..ny-1)
+        H = 0.5 * (ny - 1)
+
+        # Abstand zur nächsten Wand (symmetrisch)
+        y = yg  # 0..ny-1
+        dist_to_wall = np.minimum(y, (ny - 1) - y)  # 0..H
+
+        # normierter Abstand z/H in [0,1]
+        z_over_H = np.clip(dist_to_wall / H, 0.0, 1.0)
+
+        # u_char in PU
+        u_char = 1.0  # <- falls du willst: u_char = float(self.units.characteristic_velocity_pu)
+
+        # Power-law, exponent 1/7
+        u_base = u_char * (z_over_H ** (1.0 / 7.0))
+
+        # Setze Basisprofil in x-Richtung
+        u[0, :, :, :] = u_base
+
+        # -----------------------------
+        # 2) Zufallsstörungen (Normalverteilung)
+        # -----------------------------
+        sigma = 0.05  # 5%
+        # Gaussian noise
+        noise = rng.normal(loc=0.0, scale=sigma, size=(3, nx, ny, nz))
+
+        # Störungen relativ zu u_char
+        u += u_char * noise
+
+        # -----------------------------
+        # 3) No-Slip an Wänden erzwingen
+        # -----------------------------
+        u[:, :, 0, :] = 0.0
+        u[:, :, -1, :] = 0.0
+
+        # (falls du irgendwo eine Maske für feste Zellen nutzt)
+        if self._mask is not None:
+            u *= (1.0 - self.mask.astype(float))[None, ...]
+
+        # Tensoren zurückgeben
+        p_tensor = torch.tensor(p, dtype=self.context.dtype)
+        u_tensor = torch.tensor(u, dtype=self.context.dtype)
+
+        return p_tensor, u_tensor
+
+    def initial_pu2(self):
+        """
         Erzeugt eine komplexe Anfangsströmung, um die Transition zur Turbulenz
         zu beschleunigen. Verwendet einen Seed für reproduzierbare Ergebnisse.
         """

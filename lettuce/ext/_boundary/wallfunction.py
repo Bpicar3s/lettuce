@@ -25,7 +25,7 @@ def solve_u_tau_exact(y, u, nu,
     A = torch.exp(torch.as_tensor(-KAPPA * B, device=device, dtype=dtype))
 
     # --- Startwertwahl ---
-    if utau_prev is not None and newton_speedup:
+    if utau_prev is not None and newton_speedup and torch.isfinite(utau_prev).all():
         utau = utau_prev.clone()
     else:
         utau = torch.sqrt((u * nu / y).clamp_min(eps))
