@@ -157,7 +157,7 @@ class ChannelFlow3D(ExtFlow):
         z = np.linspace(0, self.resolution[2], self.resolution[2], endpoint=False)
         return np.meshgrid(x, y, z, indexing='ij')
 
-    def initial_pu(self):
+    def initial_pu2(self):
         """
         Init wie in Nathen et al. / Bespalko-Setup:
           u(z) = u_char * (z/H)^(1/7)
@@ -222,78 +222,78 @@ class ChannelFlow3D(ExtFlow):
 
         return p_tensor, u_tensor
 
-    def initial_pu2(self):
-        """
-        Erzeugt eine komplexe Anfangsströmung, um die Transition zur Turbulenz
-        zu beschleunigen. Verwendet einen Seed für reproduzierbare Ergebnisse.
-        """
-        # --- NEU: Zufallszahlengenerator mit dem Seed initialisieren ---
+    def initial_pu(self):
         rng = np.random.default_rng(self.random_seed)
 
-        # Gitter und Auflösung aus der Klasse holen
         xg, yg, zg = self.grid
         nx, ny, nz = self.resolution
 
-        # --- 1. Basisprofil & Dichte ---
+        # --- 1) Basisprofil & Dichte ---
+        u_char = 1.0
         p = np.ones_like(xg)[None, ...]
-        u = np.zeros((3, nx, ny, nz))
-        y_normalized = yg / (ny - 1)
-        u_base = 4 * y_normalized * (1 - y_normalized)
+        u = np.zeros((3, nx, ny, nz), dtype=np.float64)
+
+        # KANAL-KORREKT: Abstand zur nächsten Wand
+        H = 0.5 * (ny)
+        dist_to_wall = np.minimum(yg, (ny) - yg)  # 0 an beiden Wänden, H in der Mitte
+        z_over_H = np.clip(dist_to_wall / H, 0.0, 1.0)  # 0..1
+
+        # 1/7 power law
+        u_base = u_char * (z_over_H ** (1.0 / 7.0))
         u[0] = u_base * (1 - self.mask.astype(float))
 
-        # --- 2. Sinusmoden-Störung (deterministisch) ---
-        A_sin = 0.05  # 5% Amplitude
+        # --- 2) Sinusmoden-Störung (deterministisch) ---
+        A_sin = 0.05
         Lx, Ly, Lz = xg.max(), yg.max(), zg.max()
         sinus_modes = [(1, 1, 1), (2, 2, 3), (3, 2, 1)]
 
+        # Envelope: 0 an den Wänden, 1 in der Mitte
+        envelope = z_over_H  # oder: z_over_H * (1 - z_over_H) für noch weicheren Rand
+
         for kx, ky, kz in sinus_modes:
-            # --- GEÄNDERT: rng.random() statt np.random.rand() ---
             phase = 2 * np.pi * rng.random()
             mode = np.sin(2 * np.pi * (kx * xg / Lx + ky * yg / Ly + kz * zg / Lz) + phase)
-            envelope = y_normalized * (1 - y_normalized)
             u[0] += A_sin * mode * envelope
 
-        # --- 3. Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
-        A_psi = 0.1  # Amplitude der Störung
-        # --- GEÄNDERT: rng.random() statt np.random.rand() ---
-        # Beachten Sie die leicht andere Syntax: rng.random() erwartet die Shape als Tupel
+        # --- 3) Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
+        A_psi = 0.1
         random_psi = (rng.random((3, nx, ny, nz)) - 0.5) * 2
 
-        # FFT-Filterung für glatte Wirbel
         k0 = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
         psi_filtered = np.empty_like(random_psi)
+
+        kx = np.fft.fftfreq(nx).reshape(-1, 1, 1)
+        ky = np.fft.fftfreq(ny).reshape(1, -1, 1)
+        kz = np.fft.fftfreq(nz).reshape(1, 1, -1)
+
+        kabs = np.sqrt((kx * nx) ** 2 + (ky * ny) ** 2 + (kz * nz) ** 2)
+        filter_mask = np.exp(-kabs / (0.15 * k0))
+
         for d in range(3):
             psi_hat = np.fft.fftn(random_psi[d])
-            kx = np.fft.fftfreq(nx).reshape(-1, 1, 1)
-            ky = np.fft.fftfreq(ny).reshape(1, -1, 1)
-            kz = np.fft.fftfreq(nz).reshape(1, 1, -1)
-            kabs = np.sqrt((kx * nx) ** 2 + (ky * ny) ** 2 + (kz * nz) ** 2)
-
-            filter_mask = np.exp(-kabs / (0.15 * k0))
             psi_hat *= filter_mask
             psi_hat[0, 0, 0] = 0
             psi_filtered[d] = np.real(np.fft.ifftn(psi_hat))
 
-        # Curl(ψ) berechnen: u_psi = ∇ × ψ
         u_psi = np.zeros_like(u)
         u_psi[0] = np.gradient(psi_filtered[2], axis=1) - np.gradient(psi_filtered[1], axis=2)
         u_psi[1] = np.gradient(psi_filtered[0], axis=2) - np.gradient(psi_filtered[2], axis=0)
         u_psi[2] = np.gradient(psi_filtered[1], axis=0) - np.gradient(psi_filtered[0], axis=1)
 
-        # Normieren und mit Amplitude skalieren
         umax_psi = np.max(np.sqrt(np.sum(u_psi ** 2, axis=0)))
         if umax_psi > 0:
             u_psi *= A_psi / umax_psi
 
-        # --- 4. Überlagerung & Randbedingungen ---
+        # Optional: auch hier mit envelope dämpfen (hilft oft numerisch)
+        u_psi *= envelope[None, :, :, :]
+
+        # --- 4) Überlagerung & Randbedingungen ---
         u += u_psi
         u[:, :, 0, :] = 0.0
         u[:, :, -1, :] = 0.0
 
-        # --- 5. Konvertierung zu PyTorch Tensoren ---
         p_tensor = torch.tensor(p, dtype=self.context.dtype)
         u_tensor = torch.tensor(u, dtype=self.context.dtype)
-
         return p_tensor, u_tensor
 
     @property

@@ -355,13 +355,17 @@ class WallfunctionReporter(Observable):
     @torch.no_grad()
     def __call__(self, f):
         # (1) Python-Kollision nur auf Zellen ohne Maskierung (z. B. erste Fluidreihe)
-        torch.where(torch.eq(self.no_collision_mask, 0),
-                    self.collision_py(self.flow), self.flow.f,
-                    out=self.flow.f)
+        #torch.where(torch.eq(self.no_collision_mask, 0),
+        #            self.collision_py(self.flow), self.flow.f,
+        #            out=self.flow.f)
 
         # (2) Danach Wandfunktionen aufrufen (lesen u und rho nach Collision)
         self.wfb_bottom(self.flow)
         self.wfb_top(self.flow)
+
+        torch.where(torch.eq(self.no_collision_mask, 0),
+                    self.collision_py(self.flow), self.flow.f,
+                    out=self.flow.f)
 
         #torch.where(torch.eq(self.wfb_top.mask, 0),
         #            self.wfb_top(self.flow), self.flow.f, out=self.flow.f)
