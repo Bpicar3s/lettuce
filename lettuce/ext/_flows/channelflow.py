@@ -242,53 +242,22 @@ class ChannelFlow3D(ExtFlow):
         u_base = u_char * (z_over_H ** (1.0 / 7.0))
         u[0] = u_base * (1 - self.mask.astype(float))
 
-        # --- 2) Sinusmoden-Störung (deterministisch) ---
-        A_sin = 0.05
-        Lx, Ly, Lz = xg.max(), yg.max(), zg.max()
-        sinus_modes = [(1, 1, 1), (2, 2, 3), (3, 2, 1)]
+        # --- 2) Gaussian Noise Trigger (Nathen et al. Stil) ---
+        sigma = 0.05 * u_char  # 5% von u_char
+        noise = rng.normal(loc=0.0, scale=sigma, size=(3, nx, ny, nz))
 
-        # Envelope: 0 an den Wänden, 1 in der Mitte
-        envelope = z_over_H  # oder: z_over_H * (1 - z_over_H) für noch weicheren Rand
+        # Envelope: 0 an Wänden, 1 in der Mitte (weicher als z_over_H)
+        envelope = z_over_H * (1.0 - z_over_H) * 2
+        envelope /= envelope.max() + 1e-30
 
-        for kx, ky, kz in sinus_modes:
-            phase = 2 * np.pi * rng.random()
-            mode = np.sin(2 * np.pi * (kx * xg / Lx + ky * yg / Ly + kz * zg / Lz) + phase)
-            u[0] += A_sin * mode * envelope
+        # Auf alle Komponenten anwenden
+        u += noise * envelope[None, :, :, :]
 
-        # --- 3) Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
-        A_psi = 0.1
-        random_psi = (rng.random((3, nx, ny, nz)) - 0.5) * 2
+        # Optional: zusätzlich u' etwas kleiner machen, falls u'u' zu hoch bleibt:
+        # u[0] += 0.8 * noise[0] * envelope
+        # u[1] += 1.0 * noise[1] * envelope
+        # u[2] += 1.0 * noise[2] * envelope
 
-        k0 = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
-        psi_filtered = np.empty_like(random_psi)
-
-        kx = np.fft.fftfreq(nx).reshape(-1, 1, 1)
-        ky = np.fft.fftfreq(ny).reshape(1, -1, 1)
-        kz = np.fft.fftfreq(nz).reshape(1, 1, -1)
-
-        kabs = np.sqrt((kx * nx) ** 2 + (ky * ny) ** 2 + (kz * nz) ** 2)
-        filter_mask = np.exp(-kabs / (0.15 * k0))
-
-        for d in range(3):
-            psi_hat = np.fft.fftn(random_psi[d])
-            psi_hat *= filter_mask
-            psi_hat[0, 0, 0] = 0
-            psi_filtered[d] = np.real(np.fft.ifftn(psi_hat))
-
-        u_psi = np.zeros_like(u)
-        u_psi[0] = np.gradient(psi_filtered[2], axis=1) - np.gradient(psi_filtered[1], axis=2)
-        u_psi[1] = np.gradient(psi_filtered[0], axis=2) - np.gradient(psi_filtered[2], axis=0)
-        u_psi[2] = np.gradient(psi_filtered[1], axis=0) - np.gradient(psi_filtered[0], axis=1)
-
-        umax_psi = np.max(np.sqrt(np.sum(u_psi ** 2, axis=0)))
-        if umax_psi > 0:
-            u_psi *= A_psi / umax_psi
-
-        # Optional: auch hier mit envelope dämpfen (hilft oft numerisch)
-        u_psi *= envelope[None, :, :, :]
-
-        # --- 4) Überlagerung & Randbedingungen ---
-        u += u_psi
         u[:, :, 0, :] = 0.0
         u[:, :, -1, :] = 0.0
 

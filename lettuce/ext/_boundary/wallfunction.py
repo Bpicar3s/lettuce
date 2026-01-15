@@ -162,7 +162,12 @@ class WallFunction(Boundary):
         self.y_plus_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
         self.Re_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
         self.previous_u_tau_mean = torch.tensor(0.0, device=self.context.device, dtype=self.context.dtype)
-
+        if self.wall == 'bottom':
+            self.mask_fluidcell = torch.zeros_like(self.mask, dtype=torch.bool)
+            self.mask_fluidcell[:, 1, :] = True
+        elif self.wall == 'top':
+            self.mask_fluidcell = torch.zeros_like(self.mask, dtype=torch.bool)
+            self.mask_fluidcell[:, -2, :] = True
     def __call__(self, flow: Flow):
 
         if self.wall == 'bottom':
@@ -179,25 +184,18 @@ class WallFunction(Boundary):
         else:
             raise ValueError("wall must be 'bottom' or 'top'")
 
-        if self.wall == 'bottom':
-            mask_fluidcell = torch.zeros_like(self.mask, dtype=torch.bool)
-            mask_fluidcell[:, 1, :] = True
-        elif self.wall == 'top':
-            mask_fluidcell = torch.zeros_like(self.mask, dtype=torch.bool)
-            mask_fluidcell[:, -2, :] = True
-
 
         rho = flow.rho()
         u = flow.u()
         if self.force is None:
-            u_x = u[0][mask_fluidcell]
+            u_x = u[0][self.mask_fluidcell]
             acceleration = 0
         else:
-            u_x = u[0][mask_fluidcell]
+            u_x = u[0][self.mask_fluidcell]
             acceleration = self.force.acceleration[0]
 
 
-        u_z = u[2][mask_fluidcell]
+        u_z = u[2][self.mask_fluidcell]
         safe_u = torch.sqrt(u_x**2 + u_z**2)
 
         y = torch.tensor(1, device=flow.f.device, dtype=flow.f.dtype)
@@ -209,7 +207,7 @@ class WallFunction(Boundary):
                                                                    utau_prev=self.utau_start
                                                                    )
         self.utau_start = u_tau
-        tau_w = rho[:,mask_fluidcell] * u_tau**2
+        tau_w = rho[:,self.mask_fluidcell] * u_tau**2
 
         if torch.isnan(tau_w).any() or torch.isinf(tau_w).any():
             self.previous_u_tau_mean = self.u_tau_mean.clone().detach()
@@ -221,7 +219,7 @@ class WallFunction(Boundary):
         tau_x_field = - (u_x / safe_u) * 0.5 * tau_w
         tau_z_field = - (u_z / safe_u) * 0.5 * tau_w
 
-        flow.f = torch.where(self.mask, flow.f[self.stencil.opposite], flow.f)
+        flow.f[:, self.mask] = flow.f[self.stencil.opposite][:, self.mask]
 
         if self.wall == 'bottom':
             flow.f[15, self.mask] = f17_old + tau_x_field

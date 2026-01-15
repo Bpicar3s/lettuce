@@ -51,7 +51,7 @@ class Simulation:
     streaming_strategy: StreamingStrategy
 
     def __init__(self, flow: 'Flow', collision: 'Collision',
-                 reporter: List['Reporter'], streaming_strategy=StreamingStrategy.POST_STREAMING):
+                 reporter: List['Reporter'], streaming_strategy=StreamingStrategy.POST_STREAMING, pre_report: bool = True):
         self.flow = flow
         self.flow.collision = collision
         self.context = flow.context
@@ -62,6 +62,7 @@ class Simulation:
         self.pre_boundaries = flow.pre_boundaries
         self.post_boundaries = flow.post_boundaries
         self.streaming_strategy = streaming_strategy
+        self.pre_report = pre_report
 
         # ==================================== #
         # initialise masks based on boundaries #
@@ -241,8 +242,10 @@ class Simulation:
     def __call__(self, num_steps):
         beg = timer()
 
-        if self.flow.i == 0:
+        # Pre-report nur beim echten Start
+        if self.pre_report and self.flow.i == 0:
             self._report()
+
 
         for _ in range(num_steps):
             self._collide_and_stream(self)
