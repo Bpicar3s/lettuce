@@ -243,7 +243,7 @@ class ChannelFlow3D(ExtFlow):
         u[0] = u_base * (1 - self.mask.astype(float))
 
         # --- 2) Gaussian Noise Trigger (Nathen et al. Stil) ---
-        sigma = 0.05 * u_char  # 5% von u_char
+        sigma = 0.10 * u_char  # 5% von u_char
         noise = rng.normal(loc=0.0, scale=sigma, size=(3, nx, ny, nz))
 
         # Envelope: 0 an Wänden, 1 in der Mitte (weicher als z_over_H)
