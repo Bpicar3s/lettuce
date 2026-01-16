@@ -249,7 +249,7 @@ class ChannelFlow3D(ExtFlow):
         # Envelope: 0 an Wänden, 1 in der Mitte (weicher als z_over_H)
         envelope = z_over_H * (1.0 - z_over_H) * 2
         envelope /= envelope.max() + 1e-30
-
+        envelope = 1
         # Auf alle Komponenten anwenden
         u += noise * envelope[None, :, :, :]
 
