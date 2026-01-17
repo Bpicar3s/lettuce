@@ -223,8 +223,19 @@ class ChannelFlow3D(ExtFlow):
         return p_tensor, u_tensor
 
     def initial_pu(self):
+        """
+        Komplexe Anfangsströmung für schnellen Übergang zur Turbulenz.
+
+        Aufbau:
+        1) 1/7-Gesetz-Profil (u_base)
+        2) deterministische Sinusmoden als Störung in x-Richtung
+        3) stochastische, divergente-freie Störung via Vektorpotential ψ:
+           u_psi = curl(ψ), in k-Raum geglättet
+        4) Wände (y=0, y=ny-1) werden auf No-Slip gesetzt
+        """
         rng = np.random.default_rng(self.random_seed)
 
+        # Gitter & Auflösung
         xg, yg, zg = self.grid
         nx, ny, nz = self.resolution
 
@@ -233,36 +244,76 @@ class ChannelFlow3D(ExtFlow):
         p = np.ones_like(xg)[None, ...]
         u = np.zeros((3, nx, ny, nz), dtype=np.float64)
 
-        # KANAL-KORREKT: Abstand zur nächsten Wand
-        H = 0.5 * (ny)
-        dist_to_wall = np.minimum(yg, (ny) - yg)  # 0 an beiden Wänden, H in der Mitte
+        # Symmetrischer Abstand zur Wand: 0 an beiden Wänden, max in der Mitte
+        H = 0.5 * (ny - 1)
+        dist_to_wall = np.minimum(yg, (ny - 1) - yg)  # 0 an beiden Wänden, H in der Mitte
         z_over_H = np.clip(dist_to_wall / H, 0.0, 1.0)  # 0..1
 
         # 1/7 power law
         u_base = u_char * (z_over_H ** (1.0 / 7.0))
         u[0] = u_base * (1 - self.mask.astype(float))
 
-        # --- 2) Gaussian Noise Trigger (Nathen et al. Stil) ---
-        sigma = 0.10 * u_char  # 5% von u_char
-        noise = rng.normal(loc=0.0, scale=sigma, size=(3, nx, ny, nz))
+        # Weiches Envelope: 0 an Wand, 1 in der Mitte
+        envelope = z_over_H * (1.0 - z_over_H)
+        envelope /= envelope.max() + 1e-30  # normiert auf 1 in der Mitte
 
-        # Envelope: 0 an Wänden, 1 in der Mitte (weicher als z_over_H)
-        envelope = z_over_H * (1.0 - z_over_H) * 2
-        envelope /= envelope.max() + 1e-30
+        # --- 2) Sinusmoden-Störung (deterministisch) ---
+        A_sin = 0.05  # relative Amplitude (gegenüber u_char)
+        Lx, Ly, Lz = xg.max(), yg.max(), zg.max()
+        sinus_modes = [(1, 1, 1), (2, 2, 3), (3, 2, 1)]
 
-        # Auf alle Komponenten anwenden
-        u += noise #* envelope[None, :, :, :]
+        for kx, ky, kz in sinus_modes:
+            phase = 2 * np.pi * rng.random()
+            mode = np.sin(
+                2 * np.pi * (kx * xg / Lx + ky * yg / Ly + kz * zg / Lz) + phase
+            )
+            u[0] += A_sin * mode * envelope  # gedämpft zur Wand hin
 
-        # Optional: zusätzlich u' etwas kleiner machen, falls u'u' zu hoch bleibt:
-        # u[0] += 0.8 * noise[0] * envelope
-        # u[1] += 1.0 * noise[1] * envelope
-        # u[2] += 1.0 * noise[2] * envelope
+        # --- 3) Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
+        A_psi = 0.10  # Ziel-Amplitude der Wirbelgeschwindigkeit (≈10% von u_char)
+        random_psi = (rng.random((3, nx, ny, nz)) - 0.5) * 2.0
 
+        # k-Raum aufbauen
+        k0 = np.sqrt(nx ** 2 + ny ** 2 + nz ** 2)
+        psi_filtered = np.empty_like(random_psi)
+
+        kx = np.fft.fftfreq(nx).reshape(-1, 1, 1)
+        ky = np.fft.fftfreq(ny).reshape(1, -1, 1)
+        kz = np.fft.fftfreq(nz).reshape(1, 1, -1)
+        kabs = np.sqrt((kx * nx) ** 2 + (ky * ny) ** 2 + (kz * nz) ** 2)
+
+        # Low-pass Filter für glatte, großskalige Wirbel
+        filter_mask = np.exp(-kabs / (0.15 * k0))
+
+        for d in range(3):
+            psi_hat = np.fft.fftn(random_psi[d])
+            psi_hat *= filter_mask
+            psi_hat[0, 0, 0] = 0.0  # mean mode entfernen
+            psi_filtered[d] = np.real(np.fft.ifftn(psi_hat))
+
+        # Curl(ψ) berechnen: u_psi = ∇ × ψ
+        u_psi = np.zeros_like(u)
+        u_psi[0] = np.gradient(psi_filtered[2], axis=1) - np.gradient(psi_filtered[1], axis=2)
+        u_psi[1] = np.gradient(psi_filtered[0], axis=2) - np.gradient(psi_filtered[2], axis=0)
+        u_psi[2] = np.gradient(psi_filtered[1], axis=0) - np.gradient(psi_filtered[0], axis=1)
+
+        # Erst Wand-dämpfen (Form), dann auf A_psi normieren → saubere Kontrolle
+        u_psi *= envelope[None, :, :, :]
+
+        umax_psi = np.max(np.sqrt(np.sum(u_psi ** 2, axis=0)))
+        if umax_psi > 0:
+            u_psi *= A_psi / (umax_psi + 1e-30)
+
+        # --- 4) Überlagerung & Randbedingungen ---
+        u += u_psi
+
+        # No-Slip an den Wänden
         u[:, :, 0, :] = 0.0
         u[:, :, -1, :] = 0.0
 
-        p_tensor = torch.tensor(p, dtype=self.context.dtype)
-        u_tensor = torch.tensor(u, dtype=self.context.dtype)
+        # Nach torch konvertieren
+        p_tensor = torch.tensor(p, dtype=self.context.dtype, device=self.context.device)
+        u_tensor = torch.tensor(u, dtype=self.context.dtype, device=self.context.device)
         return p_tensor, u_tensor
 
     @property
