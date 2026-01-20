@@ -28,11 +28,11 @@ IMPLEMENTATIONS = {
     "native": True,
 }
 
-HS = [8,12,16,20]
+HS = [10,15,20,25,30,35,40,45,50,55,60]
 RUNS_PER_H = 5
-TMAX = 100
+TMAX = 10
 RE = 180
-MACH = 0.05
+MACH = 0.1
 NEWTON_SPEEDUP = True
 
 OUTDIR = "./output_benchmark/"
