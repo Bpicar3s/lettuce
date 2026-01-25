@@ -28,9 +28,13 @@ IMPLEMENTATIONS = {
     "native": True,
 }
 
-HS = [10,15,20,25,30,35,40,45,50,55,60]
+HS = [10, 20, 30, 40, 50, 60]
 RUNS_PER_H = 5
-TMAX = 10
+
+# Feste Schrittzahlen für Benchmark
+WARMUP_STEPS = 200
+MEASURE_STEPS = 1000
+
 RE = 180
 MACH = 0.1
 NEWTON_SPEEDUP = True
@@ -175,11 +179,19 @@ for prec_name, dtype in PRECISIONS.items():
 
                 sim = make_simulation(h, dtype, use_native)
 
-                steps = int(
-                    sim.flow.units.convert_time_to_lu(TMAX)
-                )
+                # -------------------------
+                # Warmup (ohne Messung)
+                # -------------------------
+                _ = sim.step(num_steps=WARMUP_STEPS)
 
-                mlups = sim.step(num_steps=steps)
+                # GPU synchronisieren, damit Warmup wirklich fertig ist
+                if DEVICE.type == "cuda":
+                    torch.cuda.synchronize()
+
+                # -------------------------
+                # Messlauf (für MLUPS)
+                # -------------------------
+                mlups = sim.step(num_steps=MEASURE_STEPS)
                 mlups_runs.append(mlups)
 
                 print(f"    MLUPS = {mlups:.2f}")
