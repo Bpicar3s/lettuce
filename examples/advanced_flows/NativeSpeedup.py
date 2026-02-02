@@ -31,7 +31,7 @@ IMPLEMENTATIONS = {
 # Zwei Szenarien: WallFunction + Fullway-BounceBack
 SCENARIOS = ["wallfunction", "fullway"]
 
-HS = [10, 20, 30]
+HS = [10, 20, 30, 40, 50, 60]
 RUNS_PER_H = 5
 
 # Feste Schrittzahlen für Benchmark
