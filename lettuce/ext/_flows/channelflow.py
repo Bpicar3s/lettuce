@@ -251,21 +251,7 @@ class ChannelFlow3D(ExtFlow):
 
         # 1/7 power law
         u_base = u_char * (z_over_H ** (1.0 / 7.0))
-
-        # Gaussian noise (μ=0, σ=5%)
-        sigma = 0.05 * u_char
-        noise_u = sigma * rng.standard_normal(u_base.shape)
-        noise_v = sigma * rng.standard_normal(u_base.shape)
-        noise_w = sigma * rng.standard_normal(u_base.shape)
-
-        # Add perturbations
-        u[0] = u_base + noise_u
-        u[1] = noise_v
-        u[2] = noise_w
-
-        # No-slip walls
-        u[:, 0, :, :] = 0.0
-        u[:, -1, :, :] = 0.0
+        u[0] = u_base * (1 - self.mask.astype(float))
 
         # Weiches Envelope: 0 an Wand, 1 in der Mitte
         envelope = z_over_H * (1.0 - z_over_H)
@@ -281,7 +267,7 @@ class ChannelFlow3D(ExtFlow):
             mode = np.sin(
                 2 * np.pi * (kx * xg / Lx + ky * yg / Ly + kz * zg / Lz) + phase
             )
-            #u[0] += A_sin * mode * envelope  # gedämpft zur Wand hin
+            u[0] += A_sin * mode * envelope  # gedämpft zur Wand hin
 
         # --- 3) Divergenzfreie Störung mit Vektorpotential ψ (stochastisch) ---
         A_psi = 0.10  # Ziel-Amplitude der Wirbelgeschwindigkeit (≈10% von u_char)
@@ -319,7 +305,7 @@ class ChannelFlow3D(ExtFlow):
             u_psi *= A_psi / (umax_psi + 1e-30)
 
         # --- 4) Überlagerung & Randbedingungen ---
-        #u += u_psi
+        u += u_psi
 
         # No-Slip an den Wänden
         u[:, :, 0, :] = 0.0
