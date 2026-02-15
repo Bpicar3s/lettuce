@@ -304,7 +304,7 @@ class ChannelFlow3D(ExtFlow):
         if umax_psi > 0:
             u_psi *= A_psi / (umax_psi + 1e-30)
 
-        # --- 4) Überlagerung & Randbedingungen ---
+        # -- 4) Überlagerung & Randbedingungen ---
         u += u_psi
 
         # No-Slip an den Wänden
