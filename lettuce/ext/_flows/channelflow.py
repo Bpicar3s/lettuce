@@ -250,19 +250,22 @@ class ChannelFlow3D(ExtFlow):
         z_over_H = np.clip(dist_to_wall / H, 0.0, 1.0)  # 0..1
 
         # 1/7 power law
-        # 1/7 power law
         u_base = u_char * (z_over_H ** (1.0 / 7.0))
 
-        # random perturbations: N(mu=0, sigma=0.05*u_char)
+        # Gaussian noise (μ=0, σ=5%)
         sigma = 0.05 * u_char
-        noise_u = sigma * torch.randn_like(u_base)
-        noise_v = sigma * torch.randn_like(u_base)
-        noise_w = sigma * torch.randn_like(u_base)
+        noise_u = sigma * rng.standard_normal(u_base.shape)
+        noise_v = sigma * rng.standard_normal(u_base.shape)
+        noise_w = sigma * rng.standard_normal(u_base.shape)
 
-        # add perturbations (u', v', w')
+        # Add perturbations
         u[0] = u_base + noise_u
         u[1] = noise_v
         u[2] = noise_w
+
+        # No-slip walls
+        u[:, 0, :, :] = 0.0
+        u[:, -1, :, :] = 0.0
 
         # Weiches Envelope: 0 an Wand, 1 in der Mitte
         envelope = z_over_H * (1.0 - z_over_H)
