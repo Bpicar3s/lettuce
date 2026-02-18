@@ -260,6 +260,8 @@ class WallQuantities(Observable):
         # dy = 1.0 ist korrekt in DEINEM Setup
         y_plus_profile = y * u_tau.mean() / viscosity
         U_plus_profile = U_sym / u_tau.mean()
+        re_tau_std = re_tau.std(unbiased=False)
+        re_tau_std = re_tau_std.reshape(1)  # macht aus 0D -> [1]
 
         # --- 3. Logging ---
         print(
@@ -281,6 +283,7 @@ class WallQuantities(Observable):
             ]),
             y_plus_profile.flatten(),
             U_plus_profile.flatten(),
+            re_tau_std
         ])
 
 class GlobalMeanUXReporter(Observable):
