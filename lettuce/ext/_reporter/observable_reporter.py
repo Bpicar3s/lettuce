@@ -199,14 +199,14 @@ class ObservableReporter(Reporter):
 
 
 class WallQuantities(Observable):
-    def __init__(self, mask, wall, flow,newton_speedup, context=None):
+    def __init__(self, mask, wall, flow,newton_speedup,tol, context=None):
         self.wall = wall
         self.mask = mask
         self.flow = flow
         self.context = context
         self.newton_speedup = newton_speedup
         self.utau_prev = None
-
+        self.tol = tol
     def __call__(self, f: Optional[torch.Tensor] = None):
         # --- 1. Wandgrößen ---
         if self.newton_speedup:
@@ -215,13 +215,15 @@ class WallQuantities(Observable):
                 dy=torch.tensor(1, device=self.flow.f.device, dtype=self.flow.f.dtype),
                 is_top=(self.wall == "top"),
                 newton_speedup=True,
-                utau_prev=self.utau_prev
+                utau_prev=self.utau_prev,
+                tol=self.tol
             )
         else:
             u_tau, y_plus, re_tau, u_tau_ref, re_tau_ref, mean_it, max_it = compute_wall_quantities(
                 flow=self.flow,
                 dy=torch.tensor(1, device=self.flow.f.device, dtype=self.flow.f.dtype),
-                is_top=(self.wall == "top")
+                is_top=(self.wall == "top"),
+                tol = self.tol
             )
 
         self.utau_prev = u_tau

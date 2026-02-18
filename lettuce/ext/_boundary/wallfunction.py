@@ -10,8 +10,8 @@ import torch
 
 
 
-def solve_u_tau_exact(y, u, nu,
-                      max_iter=10, tol=1e-10,
+def solve_u_tau_exact(y, u, nu, tol,
+                      max_iter=10,
                       KAPPA=0.41, B=5.5,
                       damping=1.0, utau_prev=None, newton_speedup = False):
     device = u.device
@@ -69,7 +69,7 @@ def solve_u_tau_exact(y, u, nu,
 
     return utau, mean_iters, max_iters
 
-def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_speedup = False, utau_prev = None):
+def compute_wall_quantities(flow, dy, tol, is_top: bool, acceleration = 0, newton_speedup = False, utau_prev = None):
     """
     Berechnet Wandgrößen wie u_tau, y+, Re_tau für eine Wand.
 
@@ -104,6 +104,7 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
             nu=viscosity,
             newton_speedup = newton_speedup,
             utau_prev = utau_prev,
+            tol=tol
         )
 
     elif method == "Log-Visc":
@@ -140,7 +141,7 @@ def compute_wall_quantities(flow, dy, is_top: bool, acceleration = 0, newton_spe
 
 
 class WallFunction(Boundary):
-    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.41, B=5.5, max_iter = 10, tol = 1e-10, force=None, newton_speedup = False):
+    def __init__(self, mask, stencil, h, context: 'Context', wall = 'bottom',  kappa=0.41, B=5.5, max_iter = 10, tol = 1e-6, force=None, newton_speedup = False):
         self.context = context
 
         self.mask = self.context.convert_to_tensor(mask)
@@ -204,7 +205,8 @@ class WallFunction(Boundary):
                                                                    is_top=True if self.wall == "top" else False,
                                                                    acceleration = acceleration,
                                                                    newton_speedup = self.newton_speedup,
-                                                                   utau_prev=self.utau_start
+                                                                   utau_prev=self.utau_start,
+                                                                   tol = self.tol
                                                                    )
         self.utau_start = u_tau
         tau_w = rho[:,self.mask_fluidcell] * u_tau**2
