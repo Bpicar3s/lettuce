@@ -298,7 +298,7 @@ class ChannelFlow3D(ExtFlow):
         u_psi[2] = np.gradient(psi_filtered[1], axis=0) - np.gradient(psi_filtered[0], axis=1)
 
         # Erst Wand-dämpfen (Form), dann auf A_psi normieren → saubere Kontrolle
-        u_psi *= envelope[None, :, :, :]
+        #u_psi *= envelope[None, :, :, :]
 
         umax_psi = np.max(np.sqrt(np.sum(u_psi ** 2, axis=0)))
         if umax_psi > 0:

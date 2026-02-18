@@ -313,16 +313,16 @@ class AdaptiveAcceleration(Observable):
         """
         Neue a(t) berechnen und direkt in ExactDifferenceForce schreiben.
         """
-        utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
-        utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
-        utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
+        #utau_b, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=False)
+        #utau_t, _, _, _, _, _, _ = compute_wall_quantities(self.flow, dy=1, is_top=True)
+        #utau_mean = 0.5 * (utau_b.mean() + utau_t.mean())
 
         u_field = self.flow.u()
         ux_mean = torch.mean(u_field[0, :, 1:-1, :])
 
         H = self.flow.h
-        Fx_base = (utau_mean ** 2) / H
-        #Fx_base = (self.utau ** 2) / H
+        #Fx_base = (utau_mean ** 2) / H
+        Fx_base = (self.utau ** 2) / H
 
         Fx_reg = self.k_gain * (self.target_mean_ux_lu - ux_mean) * (self.target_mean_ux_lu / H)
         Fx = (Fx_base + Fx_reg).to(device=self.context.device, dtype=self.flow.f.dtype)
